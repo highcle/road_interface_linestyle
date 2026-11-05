@@ -27,3 +27,19 @@ cronに以下を追加
 解凍
 `tar xvJf hogehoge.tar.xz`
 
+### アパッチの設定
+stakahashi*****netの設定ファイルを開いて下を追記
+```
+    <Location /WinterRoad-Overview-LineStyle>
+	Require method GET
+
+	ProxyPreserveHost On
+	ProxyPass http://127.0.0.1:5100/
+	ProxyPassReverse http://127.0.0.1:5100/
+    </Location>
+
+```
+```
+sudo apache2ctl configtest #構文テスト
+sudo systemctl restart apache2　#再起動
+```
