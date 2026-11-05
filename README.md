@@ -41,5 +41,5 @@ stakahashi*****netの設定ファイルを開いて下を追記
 ```
 ```
 sudo apache2ctl configtest #構文テスト
-sudo systemctl restart apache2　#再起動
+sudo systemctl restart apache2 #再起動
 ```
