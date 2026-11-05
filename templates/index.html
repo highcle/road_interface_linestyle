@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>国道状態モニタリングシステム</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
+</head>
+<body>
+  <!-- 手動検索時のみ表示されるローディング -->
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div style="margin-top:10px; color:#fff; font-weight:bold;">データ取得中...</div>
+  </div>
+
+  <!-- 上部横幅いっぱいのレンジスライダー -->
+  <div id="topBar">
+    <div class="slider-header">
+      <span class="slider-title">直近24時間の時間範囲指定</span>
+      <span id="timeRangeLabel" class="time-label"></span>
+    </div>
+    <div id="timeSlider"></div>
+  </div>
+
+  <div id="map"></div>
+  
+  <!-- ★ 選択路線とパネルを結ぶSVG矢印線レイヤー -->
+  <svg id="svgOverlay"></svg>
+
+  <!-- 右側コントロールパネル -->
+  <div id="panel">
+    <h3>道路モニタリング</h3>
+
+    <div class="checkbox-group">
+      <input type="checkbox" id="autoUpdate" checked>
+      <label for="autoUpdate">現在時刻モード (5分自動更新)</label>
+    </div>
+
+    <button id="btnOpenModal" class="btn-secondary" onclick="openHistoryModal()">📅 カレンダーで過去データを検索</button>
+
+    <hr>
+
+    <div class="form-group">
+      <label for="modeSelect">表示モード</label>
+      <select id="modeSelect" onchange="onModeChange()">
+        <option value="wips">WIPS 指標</option>
+        <option value="surface">路面状態</option>
+      </select>
+    </div>
+    
+    <div id="legendArea"></div>
+    <div id="status">更新待機中...</div>
+
+    <!-- 詳細 ＆ 画像表示パネル -->
+    <div id="detailPanel" class="detail-panel" style="display:none;">
+      <hr>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h4 style="margin:0;">選択区間の詳細</h4>
+        <button onclick="clearSelection()" style="padding:2px 6px; font-size:10px;">閉じる</button>
+      </div>
+      <div id="detailInfo" class="detail-info"></div>
+      <div id="imagePreviewContainer" class="image-container"></div>
+    </div>
+  </div>
+
+  <!-- 過去データ検索 モーダル -->
+  <div id="historyModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4>過去データの指定検索</h4>
+        <span class="close-btn" onclick="closeHistoryModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="modalStartTime">開始日時</label>
+          <input type="datetime-local" id="modalStartTime" step="60">
+        </div>
+        <div class="form-group">
+          <label for="modalEndTime">終了日時</label>
+          <input type="datetime-local" id="modalEndTime" step="60">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeHistoryModal()">キャンセル</button>
+        <button id="btnExecuteSearch" onclick="executeHistorySearch()">この範囲で検索</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ★ 分割された JavaScript モジュールの順次読み込み -->
+  <script src="{{ url_for('static', filename='js/state.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/connector_line.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/styles_and_filter.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/slider.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/history_modal.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app_main.js') }}"></script>
+</body>
+</html>

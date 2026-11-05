@@ -1,0 +1,10 @@
+venv
+.venv
+
+.vscode
+*.db
+.archive
+__pycache__/
+*.log
+output_24h.json
+geojson
