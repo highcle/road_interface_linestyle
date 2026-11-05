@@ -4,7 +4,7 @@
 
 画像へのリンクを張る(パスは旧インターフェース参照)
 ```
-tar xvzf geojson.tar.gz #地理空間情報の解凍
+tar xvJf geojson.tar.xz #地理空間情報の解凍
 python3 -m venv .venv #仮想環境作成
 . .venv/bin/activate #仮想環境起動
 pip install -r requirements.txt #ライブラリインストール
@@ -26,3 +26,4 @@ cronに以下を追加
 
 解凍
 `tar xvJf hogehoge.tar.xz`
+
