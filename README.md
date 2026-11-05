@@ -10,7 +10,7 @@ python3 -m venv .venv #仮想環境作成
 pip install -r requirements.txt #ライブラリインストール
 .venv/bin/python app.py
 ```
-現在はhttp://127.0.0.1:5000/　で開く
+現在はhttp://127.0.0.1:5100/　で開く
 
 cronに以下を追加
 `*/5 * * * * cd ＃インターフェースのアプリルートパス; venv/bin/python ./generate_cache.py >> cron.log 2>&1`
