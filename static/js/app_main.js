@@ -16,16 +16,18 @@ function refreshLayerStyles() {
   AppState.geojsonLayer.setStyle(feat => getFeatureStyle(feat, range.startStr, range.endStr));
 }
 
-// 1. 直近24時間データの取得 (5分ごとの自動更新時にも使用)
+// 1. 直近24時間データの取得
 function fetchRecentData(isAutoUpdate = false) {
   const statusEl = document.getElementById('status');
   
-  // 自動更新以外（初回読み込み時など）の場合のみローディング表示
   if (!isAutoUpdate) {
     document.getElementById('loadingOverlay').style.display = 'flex';
   }
 
-  fetch('/api/roads/recent')
+  // ★ ベースパスを動的に結合
+  const apiUrl = `${window.APP_ROOT || ''}/api/roads/recent`;
+
+  fetch(apiUrl)
     .then(res => res.json())
     .then(data => {
       document.getElementById('loadingOverlay').style.display = 'none';
@@ -43,7 +45,6 @@ function fetchRecentData(isAutoUpdate = false) {
           onEachFeature: (feature, layer) => {
             layer.on('click', (e) => {
               L.DomEvent.stopPropagation(e);
-              // セグメントの中央座標を取得（取得できない場合はクリック座標を使用）
               const centerLatLng = (layer.getBounds && typeof layer.getBounds === 'function')
                 ? layer.getBounds().getCenter()
                 : e.latlng;
@@ -76,7 +77,10 @@ function fetchHistoryRoadData(startStr, endStr) {
   const statusEl = document.getElementById('status');
   document.getElementById('loadingOverlay').style.display = 'flex';
 
-  fetch(`/api/roads/search?start_time=${encodeURIComponent(startStr)}&end_time=${encodeURIComponent(endStr)}`)
+  // ★ ベースパスを動的に結合
+  const apiUrl = `${window.APP_ROOT || ''}/api/roads/search?start_time=${encodeURIComponent(startStr)}&end_time=${encodeURIComponent(endStr)}`;
+
+  fetch(apiUrl)
     .then(res => res.json())
     .then(data => {
       document.getElementById('loadingOverlay').style.display = 'none';
@@ -130,18 +134,16 @@ function selectRoadSegment(feature, latlng) {
   `;
 
   if (p.image_path) {
-    const imgUrl = `/static/images/_indicated_bus_${p.image_path.slice(26, -4)}/${p.image_path.slice(6, 12)}/${p.image_path}`;
+    // ★ 画像URLもベースパスを考慮して生成
+    const rootPath = window.APP_ROOT || '';
+    const imgUrl = `${rootPath}/static/images/_indicated_bus_${p.image_path.slice(26, -4)}/${p.image_path.slice(6, 12)}/${p.image_path}`;
     
     imgContainer.innerHTML = `<img src="${imgUrl}" alt="路面画像" onerror="this.onerror=null; this.parentNode.innerHTML='<div class=\\'no-image\\'>画像が読み込めませんでした</div>';"/>`;
-    
-    //imgContainer.innerHTML = `<img src="/images/${p.image_path}" alt="路面画像" onerror="this.onerror=null; this.parentNode.innerHTML='<div class=\\'no-image\\'>画像が読み込めませんでした</div>';"/>`;
   } else {
     imgContainer.innerHTML = `<div class="no-image">この区間の画像はありません</div>`;
   }
 
   detailPanel.style.display = 'block';
-  
-  // 接続矢印線の描画更新
   updateConnectorLine();
 }
 
@@ -152,7 +154,7 @@ function clearSelection() {
   clearConnectorLine();
 }
 
-// 5分間隔 (300,000 ms) の自動更新（ローディング表示なし）
+// 5分自動更新
 setInterval(() => {
   const autoUpdateChecked = document.getElementById('autoUpdate').checked;
   if (autoUpdateChecked && !AppState.customSearchMode) {

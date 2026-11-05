@@ -9,6 +9,11 @@
   
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
+
+  <!-- ★ アプリケーションのベースパスをJavaScriptへ渡す設定 -->
+  <script>
+    window.APP_ROOT = "{{ request.script_root }}";
+  </script>
 </head>
 <body>
   <!-- 手動検索時のみ表示されるローディング -->
@@ -28,7 +33,7 @@
 
   <div id="map"></div>
   
-  <!-- ★ 選択路線とパネルを結ぶSVG矢印線レイヤー -->
+  <!-- 選択路線とパネルを結ぶSVG矢印線レイヤー -->
   <svg id="svgOverlay"></svg>
 
   <!-- 右側コントロールパネル -->
@@ -91,7 +96,7 @@
     </div>
   </div>
 
-  <!-- ★ 分割された JavaScript モジュールの順次読み込み -->
+  <!-- JavaScript モジュール読み込み -->
   <script src="{{ url_for('static', filename='js/state.js') }}"></script>
   <script src="{{ url_for('static', filename='js/connector_line.js') }}"></script>
   <script src="{{ url_for('static', filename='js/styles_and_filter.js') }}"></script>
