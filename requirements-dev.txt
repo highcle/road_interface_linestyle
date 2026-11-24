@@ -1,0 +1,4 @@
+# 開発・テスト用（本番には不要）
+-r requirements.txt
+pytest
+playwright

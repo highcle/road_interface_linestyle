@@ -2,106 +2,176 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>国道状態モニタリングシステム</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-  
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
-
-  <!-- ★ アプリケーションのベースパスをJavaScriptへ渡す設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d5fd1'/%3E%3Cpath d='M6 24 L13 8 M26 24 L19 8' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M16 10v3M16 17v3' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <title>冬季道路 路面・視界情報（線的表示）</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/nouislider/nouislider.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/nouislider/nouislider.min.js') }}"></script>
   <script>
-    window.APP_ROOT = "{{ request.script_root }}";
+    window.APP_CONFIG = {
+      root: {{ request.script_root | tojson }},
+      geometryVersion: {{ geometry_version | tojson }},
+      maxSearchDays: {{ max_search_days | tojson }},
+      thresholds: {{ thresholds | tojson }}
+    };
   </script>
 </head>
 <body>
-  <!-- 手動検索時のみ表示されるローディング -->
-  <div id="loadingOverlay">
-    <div class="spinner"></div>
-    <div style="margin-top:10px; color:#fff; font-weight:bold;">データ取得中...</div>
-  </div>
+  <header id="appHeader">
+    <div class="brand">
+      <h1>冬季道路 路面・視界情報</h1>
+      <span class="brand-sub">車載カメラ観測による道路区間ごとの状況</span>
+    </div>
 
-  <!-- 上部横幅いっぱいのレンジスライダー -->
-  <div id="topBar">
-    <div class="slider-header">
-      <span class="slider-title">直近24時間の時間範囲指定</span>
-      <span id="timeRangeLabel" class="time-label"></span>
+    <div class="mode-switch" role="group" aria-label="表示する期間">
+      <button type="button" id="btnModeLive" class="seg-btn" aria-pressed="true">現在（直近24時間）</button>
+      <button type="button" id="btnModeHistory" class="seg-btn" aria-pressed="false">過去を検索…</button>
+    </div>
+
+    <div class="header-right">
+      <div id="freshness" class="freshness" aria-live="polite">読み込み中…</div>
+      <button type="button" id="btnHelp" class="icon-btn" aria-label="この地図について">?</button>
+    </div>
+  </header>
+
+  <section id="timeBar" aria-label="表示する時間範囲">
+    <div class="timebar-head">
+      <div class="timebar-title">
+        <span id="timeModeLabel" class="time-mode">直近24時間</span>
+        <span id="timeRangeLabel" class="time-label"></span>
+      </div>
+      <div class="presets" role="group" aria-label="期間のプリセット">
+        <span class="presets-label">直近</span>
+        <button type="button" class="chip" data-hours="1">1時間</button>
+        <button type="button" class="chip" data-hours="3">3時間</button>
+        <button type="button" class="chip" data-hours="6">6時間</button>
+        <button type="button" class="chip" data-hours="12">12時間</button>
+        <button type="button" class="chip" data-hours="all">全体</button>
+      </div>
     </div>
     <div id="timeSlider"></div>
+  </section>
+
+  <div id="historyBanner" class="banner banner-history" hidden>
+    <span id="historyBannerText"></span>
+    <button type="button" id="btnBackToLive" class="btn btn-small">現在の表示に戻る</button>
   </div>
+  <div id="staleBanner" class="banner banner-warn" role="alert" hidden></div>
 
-  <div id="map"></div>
-  
-  <!-- 選択路線とパネルを結ぶSVG矢印線レイヤー -->
-  <svg id="svgOverlay"></svg>
+  <main id="mapWrap">
+    <div id="map" aria-label="道路状況の地図"></div>
 
-  <!-- 右側コントロールパネル -->
-  <div id="panel">
-    <h3>道路モニタリング</h3>
+    <form id="placeSearch" class="map-search" role="search">
+      <input type="search" id="placeQuery" placeholder="地名・住所で移動" aria-label="地名・住所で移動" autocomplete="off">
+      <button type="submit" class="btn btn-small">移動</button>
+      <ul id="placeResults" class="place-results" hidden></ul>
+    </form>
+  </main>
 
-    <div class="checkbox-group">
-      <input type="checkbox" id="autoUpdate" checked>
-      <label for="autoUpdate">現在時刻モード (5分自動更新)</label>
-    </div>
+  <svg id="svgOverlay" aria-hidden="true"></svg>
 
-    <button id="btnOpenModal" class="btn-secondary" onclick="openHistoryModal()">📅 カレンダーで過去データを検索</button>
+  <aside id="panel" aria-label="表示設定と詳細">
+    <button type="button" id="btnPanelToggle" class="panel-toggle" aria-expanded="true" aria-controls="panelBody">
+      <span class="panel-toggle-text">表示設定・凡例</span>
+    </button>
+    <div id="panelBody" class="panel-body">
 
-    <hr>
-
-    <div class="form-group">
-      <label for="modeSelect">表示モード</label>
-      <select id="modeSelect" onchange="onModeChange()">
-        <option value="wips">WIPS 指標</option>
-        <option value="surface">路面状態</option>
-      </select>
-    </div>
-    
-    <div id="legendArea"></div>
-    <div id="status">更新待機中...</div>
-
-    <!-- 詳細 ＆ 画像表示パネル -->
-    <div id="detailPanel" class="detail-panel" style="display:none;">
-      <hr>
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h4 style="margin:0;">選択区間の詳細</h4>
-        <button onclick="clearSelection()" style="padding:2px 6px; font-size:10px;">閉じる</button>
-      </div>
-      <div id="detailInfo" class="detail-info"></div>
-      <div id="imagePreviewContainer" class="image-container"></div>
-    </div>
-  </div>
-
-  <!-- 過去データ検索 モーダル -->
-  <div id="historyModal" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h4>過去データの指定検索</h4>
-        <span class="close-btn" onclick="closeHistoryModal()">&times;</span>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="modalStartTime">開始日時</label>
-          <input type="datetime-local" id="modalStartTime" step="60">
+      <section id="detailPanel" class="card detail" hidden aria-live="polite">
+        <div class="card-head">
+          <h2 id="detailTitle">選択区間</h2>
+          <button type="button" id="btnCloseDetail" class="icon-btn" aria-label="詳細を閉じる">×</button>
         </div>
-        <div class="form-group">
-          <label for="modalEndTime">終了日時</label>
-          <input type="datetime-local" id="modalEndTime" step="60">
+        <div id="detailBody"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>表示する指標</h2></div>
+        <div class="seg-group" role="group" aria-label="表示する指標">
+          <button type="button" class="seg-btn" data-indicator="wips" aria-pressed="true">視界（WIPS）</button>
+          <button type="button" class="seg-btn" data-indicator="surface" aria-pressed="false">路面状態</button>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeHistoryModal()">キャンセル</button>
-        <button id="btnExecuteSearch" onclick="executeHistorySearch()">この範囲で検索</button>
+        <div id="legendArea" class="legend"></div>
+        <p class="legend-note">線が薄いほど古い観測です。チェックを外すと非表示になります。</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2 id="alertListTitle">注意が必要な区間</h2>
+          <span id="alertCount" class="badge"></span>
+        </div>
+        <ol id="alertList" class="alert-list"></ol>
+      </section>
+
+      <div class="panel-foot">
+        <label class="switch"><input type="checkbox" id="autoUpdate" checked> 5分ごとに自動更新</label>
+        <span id="status" class="status" aria-live="polite"></span>
       </div>
     </div>
-  </div>
+  </aside>
 
-  <!-- JavaScript モジュール読み込み -->
-  <script src="{{ url_for('static', filename='js/state.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/connector_line.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/styles_and_filter.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/slider.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/history_modal.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/app_main.js') }}"></script>
+  <div id="loadingIndicator" class="loading" hidden><span class="spinner"></span><span>データ取得中…</span></div>
+
+  <!-- 過去データ検索 -->
+  <dialog id="historyDialog" aria-labelledby="historyTitle">
+    <form method="dialog" id="historyForm">
+      <h2 id="historyTitle">過去データを検索</h2>
+      <div class="presets" role="group" aria-label="期間のプリセット">
+        <button type="button" class="chip" data-preset="today">今日</button>
+        <button type="button" class="chip" data-preset="yesterday">昨日</button>
+        <button type="button" class="chip" data-preset="last3days">直近3日</button>
+        <button type="button" class="chip" data-preset="lastweek">1週間前の同時刻</button>
+      </div>
+      <label class="field">開始日時<input type="datetime-local" id="historyStart" step="60" required></label>
+      <label class="field">終了日時<input type="datetime-local" id="historyEnd" step="60" required></label>
+      <p class="hint">一度に検索できるのは最大 <span id="maxDaysLabel"></span> 日間です。</p>
+      <p id="historyError" class="error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="btnHistoryCancel">キャンセル</button>
+        <button type="submit" class="btn btn-primary" id="btnHistorySearch">この期間を表示</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 画像拡大 -->
+  <dialog id="imageDialog" class="image-dialog" aria-label="路面画像の拡大表示">
+    <form method="dialog"><button class="icon-btn dialog-close" aria-label="閉じる">×</button></form>
+    <img id="imageDialogImg" alt="">
+    <p id="imageDialogCaption" class="caption"></p>
+  </dialog>
+
+  <!-- ヘルプ -->
+  <dialog id="helpDialog" class="help-dialog" aria-labelledby="helpTitle">
+    <form method="dialog"><button class="icon-btn dialog-close" aria-label="閉じる">×</button></form>
+    <h2 id="helpTitle">この地図について</h2>
+    <p>路線バス等に搭載した車載カメラで撮影した画像から、<b>視界（WIPS）</b>と<b>路面状態</b>を推定し、走行した道路区間ごとに色分けして表示しています。対象は国道・都道府県道・高速自動車国道等です。</p>
+
+    <h3>視界の指標 WIPS とは</h3>
+    <p>WIPS（Weighted Intensity of Power Spectra）は、画像の空間周波数成分の強さから視界の良し悪しを数値化する指標です（Hagiwara et al., 2006）。吹雪や霧で視界が悪くなると、遠くの景色の輪郭（細かな模様＝高い周波数成分）がぼやけて失われるため、値が小さくなります。</p>
+    <p>本システムでは、画像中央の 256×256 画素を2次元フーリエ変換し、直流付近の低周波成分を除いた周波数帯のパワーの合計を対数にとった値を用いています。</p>
+    <ul class="help-legend">
+      <li><span class="sw" style="--c:var(--c-good)"></span><b><span class="th-warn"></span> 以上</b>：良好</li>
+      <li><span class="sw" style="--c:var(--c-warn)"></span><b><span class="th-danger"></span> 超〜<span class="th-warn"></span> 未満</b>：注意</li>
+      <li><span class="sw" style="--c:var(--c-danger)"></span><b><span class="th-danger"></span> 以下</b>：視程不良（危険）</li>
+    </ul>
+
+    <h3>路面状態</h3>
+    <p>同じ画像の路面部分から、乾燥・半湿潤・湿潤・シャーベット・積雪・凍結の6区分を判別しています。凡例は滑りやすさの目安順に並べています。</p>
+
+    <h3>区間の値の決め方（代表点）</h3>
+    <p>1つの区間に複数の観測がある場合は、<b>その区間を最後に通過した車両の観測のうち、WIPS が最も低い（視界が悪い）観測</b>を代表として表示します。WIPS・路面状態・時刻・画像はすべてこの1つの観測のものです。古い通過の情報は使わず、通過中のばらつきは安全側を採ります。</p>
+
+    <h3>注意事項</h3>
+    <ul>
+      <li>観測は車両が走行した区間・時刻に限られます。灰色の細線は表示期間内に観測がない区間です。</li>
+      <li>色は観測時点の状況です。線が薄いほど観測から時間が経っています。</li>
+      <li>本情報は参考情報です。実際の運転では道路情報・気象情報も確認してください。</li>
+    </ul>
+    <p class="cite">参考文献: Hagiwara, T., Ota, Y., Kaneda, Y., Nagata, Y., &amp; Araki, K. (2006). Method of Processing Closed-Circuit Television Digital Images for Poor Visibility Identification. <i>Transportation Research Record</i>, 1973(1), 95–104. <a href="https://doi.org/10.1177/0361198106197300112" target="_blank" rel="noopener">doi:10.1177/0361198106197300112</a><br>地図: 国土地理院 淡色地図 / 道路: 国土数値情報（道路）</p>
+  </dialog>
+
+  <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
