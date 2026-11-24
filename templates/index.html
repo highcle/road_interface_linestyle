@@ -15,6 +15,7 @@
       root: {{ request.script_root | tojson }},
       geometryVersion: {{ geometry_version | tojson }},
       maxSearchDays: {{ max_search_days | tojson }},
+      tzOffsetMinutes: {{ tz_offset_minutes | tojson }},
       thresholds: {{ thresholds | tojson }}
     };
   </script>

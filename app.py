@@ -1,5 +1,6 @@
 import gzip
 import logging
+from datetime import datetime
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -77,6 +78,7 @@ def index():
         "index.html",
         geometry_version=service.signature,
         max_search_days=config.MAX_SEARCH_DAYS,
+        tz_offset_minutes=int(datetime.now(config.TIMEZONE).utcoffset().total_seconds() // 60),
         thresholds={"danger": config.WIPS_DANGER_MAX, "warn": config.WIPS_WARN_MAX},
     )
 

@@ -135,3 +135,12 @@ def test_parse_image_name(name, expected):
     from services.db_connector import parse_image_name
     info = parse_image_name(name)
     assert (info and (info["date"], info["bus"])) == expected if expected else info is None
+
+
+def test_pass_numbers_unique_for_simultaneous_start():
+    df = frame([
+        obs(1, "2026-01-10 10:00:00", 9.1, bus="B"),
+        obs(1, "2026-01-10 10:00:00", 7.0, bus="C"),
+        obs(1, "2026-01-10 11:00:00", 8.0, bus="B"),
+    ])
+    assert sorted(rp.assign_passes(df)["pass_no"]) == [1, 2, 3]

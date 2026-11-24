@@ -3,7 +3,7 @@ import { state, loadPrefs, savePrefs, readHash, writeHash } from './state.js';
 import * as api from './api.js';
 import * as time from './time.js';
 import { initMap, setGeometry, restyle, highlightSelected, zoomTo, ensureVisible, map } from './roadmap.js';
-import { initTimebar, setWindow, setModeLabel } from './timebar.js';
+import { initTimebar, setWindow, setRange, setModeLabel, disableTimebar } from './timebar.js';
 import { renderLegend, renderAlertList, renderDetail, hideDetail } from './panel.js';
 import { updateConnector } from './connector.js';
 import { initHistoryDialog, initImageDialog, initHelpDialog, initPlaceSearch } from './dialogs.js';
@@ -70,6 +70,9 @@ function renderAll() {
 }
 
 // ---- データ取得 --------------------------------------------------------------
+// モード切替の直前の状態（切替先の取得に失敗したら戻す）
+let fallbackState = null;
+
 async function load({ depth = 0 } = {}) {
   const seq = ++reqSeq;
   setLoading(true);
@@ -86,6 +89,7 @@ async function load({ depth = 0 } = {}) {
       return load({ depth: depth + 1 });
     }
     state.status = data;
+    fallbackState = null;
     renderHeader(data);
     if (geometryReady) renderAll();
     setStatus(`${data.counts.segments_with_data} 区間に観測あり`);
@@ -94,6 +98,15 @@ async function load({ depth = 0 } = {}) {
     if (seq !== reqSeq) return;
     console.error(err);
     setStatus(`更新できませんでした: ${err.message}`, true);
+    if (fallbackState) {
+      // 切替先を表示できなかった → 直前の表示（モード・期間）に戻す
+      const prev = fallbackState;
+      fallbackState = null;
+      Object.assign(state, prev);
+      if (state.window) setWindow(state.window);
+      if (state.range) setRange(state.range);
+      if (state.status) renderHeader(state.status);
+    }
   } finally {
     if (seq === reqSeq) setLoading(false);
   }
@@ -136,21 +149,20 @@ function onFilterChange() {
 }
 
 // ---- モード ------------------------------------------------------------------
-function goLive() {
-  state.mode = 'live';
-  state.history = null;
+function switchMode(mode, history) {
+  if (state.status) {
+    fallbackState = { mode: state.mode, history: state.history, window: state.window, range: state.range };
+  }
+  state.mode = mode;
+  state.history = history;
   state.window = null;
   state.range = null;
+  disableTimebar();
   load();
 }
 
-function goHistory(range) {
-  state.mode = 'history';
-  state.history = range;
-  state.window = null;
-  state.range = null;
-  load();
-}
+const goLive = () => switchMode('live', null);
+const goHistory = (range) => switchMode('history', range);
 
 // ---- パネル開閉 ----------------------------------------------------------------
 function expandPanel() {

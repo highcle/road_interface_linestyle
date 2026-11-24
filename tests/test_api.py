@@ -119,3 +119,10 @@ def test_cache_files_written():
     names = os.listdir(config.CACHE_DIR)
     assert "recent_matched.pkl" in names
     assert any(n.startswith("geometry_") for n in names)
+
+
+def test_range_outside_window_falls_back_to_whole_window(client):
+    """時間が経って表示範囲が期間外になっても 400 にせず、期間全体を返す（自動更新が止まらない）"""
+    r, d = get_json(client, "/api/roads/status?start=2026-01-08 08:00:00&end=2026-01-08 10:00:00")
+    assert r.status_code == 200
+    assert d["range"] == d["window"]

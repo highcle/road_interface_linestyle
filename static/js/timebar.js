@@ -11,18 +11,20 @@ let onChange = () => {};
 export function initTimebar(handler) {
   onChange = handler;
   slider = document.getElementById('timeSlider');
-  const now = Date.now();
+  const now = time.fallbackNow();
   noUiSlider.create(slider, {
     start: [now - time.HOUR, now],
     connect: true,
     range: { min: now - time.DAY, max: now },
     step: STEP,
+    margin: STEP,  // 両端を重ねて長さ0の範囲にしない
     behaviour: 'tap-drag',
     handleAttributes: [{ 'aria-label': '表示開始時刻' }, { 'aria-label': '表示終了時刻' }],
   });
   slider.setAttribute('disabled', true);
-  slider.noUiSlider.on('update', (vals) => updateLabel(Number(vals[0]), Number(vals[1])));
+  slider.noUiSlider.on('update', (vals) => { if (state.window) updateLabel(Number(vals[0]), Number(vals[1])); });
   slider.noUiSlider.on('change', (vals) => {
+    if (!state.window) return;  // 期間の取得中は操作を受け付けない
     state.range = { start: Number(vals[0]), end: Number(vals[1]) };
     markPreset();
     onChange();
@@ -79,10 +81,18 @@ export function setWindow(win, { keepEndAtLatest = true } = {}) {
 }
 
 export function setRange(range) {
-  state.range = range;
   slider.noUiSlider.set([range.start, range.end], false);
-  updateLabel(range.start, range.end);
+  // つまみは刻み（5分）に丸められるので、実際の値を状態として採用する
+  const [s, e] = slider.noUiSlider.get(true).map(Number);
+  state.range = { start: s, end: e };
+  updateLabel(s, e);
   markPreset();
+}
+
+/** 期間を取り直している間はスライダーを操作不可にする */
+export function disableTimebar() {
+  slider.setAttribute('disabled', true);
+  document.getElementById('timeRangeLabel').textContent = '読み込み中…';
 }
 
 function updateLabel(start, end) {

@@ -108,6 +108,7 @@ class StatusService:
         self.geometry_path = build_geometry_file(self.roads, self.signature)
         self._recent = None
         self._recent_mtime = None
+        self.signature_mismatch = False
         self._lock = threading.Lock()
         self._search_sem = threading.BoundedSemaphore(config.MAX_CONCURRENT_SEARCHES)
         self._search_cache = OrderedDict()
@@ -124,11 +125,16 @@ class StatusService:
             if mtime is not None and mtime != self._recent_mtime:
                 with open(RECENT_CACHE, "rb") as f:
                     data = pickle.load(f)
+                self._recent_mtime = mtime  # 同じファイルを何度も読み直さない
                 if data.get("signature") != self.signature:
-                    log.warning("キャッシュの道路データが現在のものと異なります。generate_cache.py を再実行してください")
+                    # 道路データが更新された（区間IDが変わる）→ アプリの再起動が必要
+                    self.signature_mismatch = True
+                    log.error("キャッシュの道路データ(%s)が起動時のもの(%s)と異なります。アプリを再起動してください",
+                              data.get("signature"), self.signature)
                 else:
+                    self.signature_mismatch = False
                     data["source"] = "cache"
-                    self._recent, self._recent_mtime = data, mtime
+                    self._recent = data
             if self._recent is None:
                 # キャッシュ未生成（初回起動など）: その場で計算して保持する
                 log.warning("直近キャッシュがないため DB から直接計算します（generate_cache.py の cron 設定を確認）")
@@ -181,12 +187,15 @@ class StatusService:
         return "history", self.history(base_start, base_end)
 
     def status(self, prefix, base_start=None, base_end=None, start=None, end=None):
+        if start and end and start >= end:
+            raise ValidationError("表示範囲の開始は終了より前にしてください")
         mode, data = self.base_data(base_start, base_end)
         w_start, w_end = data["window_start"], data["window_end"]
         start = max(start or w_start, w_start)
         end = min(end or w_end, w_end)
         if start > end:
-            raise ValidationError("表示範囲が検索期間の外です")
+            # 表示範囲が期間の外に出た（時間の経過で期間が進んだ等）→ 期間全体に戻す
+            start, end = w_start, w_end
 
         matched = data["matched"]
         segments = representative.select_representatives(matched, start, end)
@@ -235,4 +244,6 @@ class StatusService:
                 out["status"] = "stale"
         else:
             out["status"] = "no_cache"
+        if self.signature_mismatch:
+            out["status"] = "restart_required"
         return out

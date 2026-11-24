@@ -45,9 +45,10 @@ def assign_passes(matched, gap_minutes=config.PASS_GAP_MINUTES):
     )
     df["pass_key"] = new_pass.cumsum()
     # 区間内で時系列順の通し番号（1始まり）
-    first_t = df.groupby("pass_key")["get_at"].transform("min")
-    df["pass_no"] = (df.assign(_t=first_t)
-                       .groupby("seg_id")["_t"].rank(method="dense").astype(int))
+    first = df.groupby("pass_key").agg(seg_id=("seg_id", "first"), t=("get_at", "min"))
+    first = first.reset_index().sort_values(["seg_id", "t", "pass_key"])
+    first["pass_no"] = first.groupby("seg_id").cumcount() + 1  # 同時刻開始でも重複しない
+    df["pass_no"] = df["pass_key"].map(first.set_index("pass_key")["pass_no"]).astype(int)
     return df
 
 

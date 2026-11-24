@@ -74,7 +74,7 @@ export function initHistoryDialog(onSearch) {
 
 /** サーバー基準の現在時刻（ブラウザ時計ではなく、最後に取得したステータスの now） */
 function nowMs() {
-  return time.parse(state.status?.now) ?? state.window?.end ?? Date.now();
+  return time.parse(state.status?.now) ?? state.window?.end ?? time.fallbackNow();
 }
 
 // ---- 画像拡大 ---------------------------------------------------------------

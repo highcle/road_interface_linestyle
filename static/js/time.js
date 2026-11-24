@@ -54,6 +54,11 @@ export function durationLabel(ms) {
   return `${Math.floor(h / 24)}日${h % 24 ? `${h % 24}時間` : ''}`;
 }
 
+/** サーバーの時刻がまだ無いときの代替: ブラウザ時計をサーバーのタイムゾーンの壁時計に換算 */
+export function fallbackNow() {
+  return Date.now() + (window.APP_CONFIG.tzOffsetMinutes ?? 540) * 60 * 1000;
+}
+
 export const MIN = 60 * 1000;
 export const HOUR = 60 * MIN;
 export const DAY = 24 * HOUR;

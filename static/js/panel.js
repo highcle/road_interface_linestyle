@@ -146,15 +146,12 @@ export function renderDetail(segId, rep, { onImage, timelinePromise }) {
     h('p', { class: 'muted seg-id' }, `区間ID ${segId}`),
   );
 
+  // 応答が届くまでに別の区間を選んだ・再描画した場合は描かない
+  const box = document.getElementById('timelineChart');
+  const stillShown = () => box.isConnected && state.selectedId === segId;
   timelinePromise
-    .then((obs) => {
-      const box = document.getElementById('timelineChart');
-      if (box) box.replaceChildren(sparkline(obs, rep));
-    })
-    .catch(() => {
-      const box = document.getElementById('timelineChart');
-      if (box) box.replaceChildren(h('p', { class: 'muted' }, '推移を取得できませんでした'));
-    });
+    .then((obs) => { if (stillShown()) box.replaceChildren(sparkline(obs, rep)); })
+    .catch(() => { if (stillShown()) box.replaceChildren(h('p', { class: 'muted' }, '推移を取得できませんでした')); });
 }
 
 export function hideDetail() {

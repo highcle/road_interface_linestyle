@@ -174,3 +174,21 @@ def test_help_dialog_closes_with_escape(page):
     assert "Weighted Intensity of Power Spectra" in page.text_content("#helpDialog")
     page.keyboard.press("Escape")
     assert not page.is_visible("#helpDialog")
+
+
+def test_failed_history_search_reverts_to_live(page):
+    """過去検索が失敗（混雑 503）したら、現在表示のまま操作を続けられる"""
+    page.route("**/api/roads/status?base_start=*", lambda route: route.fulfill(
+        status=503, content_type="application/json",
+        body='{"error": "他の検索を処理中です。しばらくしてから再度お試しください"}'))
+    page.click("#btnModeHistory")
+    page.fill("#historyStart", "2026-01-08T00:00")
+    page.fill("#historyEnd", "2026-01-09T00:00")
+    page.click("#btnHistorySearch")
+    page.wait_for_function("document.querySelector('#status').textContent.includes('他の検索を処理中')")
+    assert page.text_content("#timeModeLabel") == "直近24時間"
+    assert page.locator("#historyBanner").is_hidden()
+    assert "〜" in page.text_content("#timeRangeLabel")
+    # スライダー操作で通常どおり更新できる
+    page.click("#timeBar [data-hours='1']")
+    page.wait_for_function("document.querySelector('#status').textContent.startsWith('2 区間')")
