@@ -7,6 +7,7 @@ import { initTimebar, setWindow, setRange, setModeLabel, disableTimebar } from '
 import { renderLegend, renderAlertList, renderDetail, hideDetail } from './panel.js';
 import { updateConnector } from './connector.js';
 import { initHistoryDialog, initImageDialog, initHelpDialog, initPlaceSearch } from './dialogs.js';
+import { initBuses, refreshBuses } from './buses.js';
 
 const AUTO_UPDATE_MS = 5 * 60 * 1000;
 const el = (id) => document.getElementById(id);
@@ -88,8 +89,10 @@ async function load({ depth = 0 } = {}) {
     if ((r.start !== state.range.start || r.end !== state.range.end) && depth < 1) {
       return load({ depth: depth + 1 });
     }
+    const modeChanged = state.status?.mode !== data.mode;
     state.status = data;
     fallbackState = null;
+    if (modeChanged) refreshBuses();
     renderHeader(data);
     if (geometryReady) renderAll();
     setStatus(`${data.counts.segments_with_data} 区間に観測あり`);
@@ -216,6 +219,14 @@ async function boot() {
   initPlaceSearch();
   openImage = initImageDialog();
   const historyDialog = initHistoryDialog(goHistory);
+  initBuses({ onImageClick: (b) => openImage(b) });
+
+  const optGradient = el('optGradient');
+  optGradient.checked = state.gradient;
+  optGradient.addEventListener('change', () => { state.gradient = optGradient.checked; savePrefs(); restyle(); });
+  const optBuses = el('optBuses');
+  optBuses.checked = state.showBuses;
+  optBuses.addEventListener('change', () => { state.showBuses = optBuses.checked; savePrefs(); refreshBuses(); });
 
   el('btnModeLive').addEventListener('click', () => { if (state.mode !== 'live') goLive(); });
   el('btnModeHistory').addEventListener('click', () => historyDialog.open());
@@ -238,6 +249,7 @@ async function boot() {
   setInterval(() => {
     if (state.autoUpdate && state.mode === 'live' && !document.hidden) load();
   }, AUTO_UPDATE_MS);
+  // バスの位置は道路の状態より頻繁に更新する（buses.js 内で1分ごと）
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && state.autoUpdate && state.mode === 'live' && Date.now() - lastFetchAt > AUTO_UPDATE_MS) load();
   });

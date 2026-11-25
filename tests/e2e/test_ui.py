@@ -192,3 +192,27 @@ def test_failed_history_search_reverts_to_live(page):
     # スライダー操作で通常どおり更新できる
     page.click("#timeBar [data-hours='1']")
     page.wait_for_function("document.querySelector('#status').textContent.startsWith('2 区間')")
+
+
+def test_bus_marker_and_toggles(page):
+    # 12:00 の5分以内: G（F は G から約20m のためまとめられる）
+    page.wait_for_selector(".bus-marker")
+    assert page.locator(".bus-marker").count() == 1
+    assert page.text_content(".bus-marker .bus-id") == "G"
+    assert page.text_content("#busInfo").startswith("1 台")
+    page.hover(".bus-marker")
+    tip = page.text_content(".bus-tooltip")
+    assert "車両 G" in tip and "近くの車両: F" in tip
+    page.uncheck("#optBuses")
+    assert page.locator(".bus-marker").count() == 0
+    page.check("#optBuses")
+    page.wait_for_selector(".bus-marker")
+    # グラデーションの切り替えでエラーにならない
+    page.uncheck("#optGradient")
+    page.check("#optGradient")
+    # 過去データの表示中はバスを出さない
+    page.click("#btnModeHistory")
+    page.click("#historyDialog [data-preset='yesterday']")
+    page.click("#btnHistorySearch")
+    page.wait_for_function("document.querySelector('#historyBanner').hidden === false")
+    page.wait_for_function("document.querySelectorAll('.bus-marker').length === 0")

@@ -4,16 +4,8 @@ import os
 
 import pytest
 
-import generate_cache
 
 PREFIX = "/WinterRoad-Overview-LineStyle"
-
-
-@pytest.fixture(scope="module")
-def client():
-    generate_cache.main()
-    import app as app_module
-    return app_module.app.test_client()
 
 
 def get_json(client, url):
@@ -40,8 +32,9 @@ def test_status_live(client):
     assert d["window"] == {"start": "2026-01-09 12:00:00", "end": "2026-01-10 12:00:00"}
     segs = d["segments"]
     assert set(segs) == {"0", "1", "2"}  # 対象外道路・50m 超の観測は紐付かない
-    assert segs["0"]["wips"] == 8.2 and segs["0"]["road_surface"] == "wet"
-    assert segs["0"]["image_url"] == f"{PREFIX}/static/images/_indicated_bus_A/100126/image_100126_110015_1_bus_A.jpg"
+    # 最新通過 {9.0, 8.2, 9.5} の中央値 9.0 の観測
+    assert segs["0"]["wips"] == 9.0 and segs["0"]["road_surface"] == "dry"
+    assert segs["0"]["image_url"] == f"{PREFIX}/static/images/_indicated_bus_A/100126/image_100126_110000_1_bus_A.jpg"
     assert segs["1"]["bus"] == "C"
     assert segs["2"]["wips"] is None and segs["2"]["road_surface"] == "fresh"
     assert d["cache_stale"] is False

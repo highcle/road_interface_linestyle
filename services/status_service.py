@@ -11,6 +11,7 @@ import logging
 import os
 import pickle
 import threading
+import time
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
@@ -18,7 +19,7 @@ import pandas as pd
 import shapely
 
 import config
-from services import db_connector, legacy_api, representative
+from services import bus_service, db_connector, legacy_api, representative
 from services.matcher import RoadMatcher
 from services.road_loader import load_roads
 
@@ -115,6 +116,7 @@ class StatusService:
         self._search_cache = OrderedDict()
         self._legacy_recent = (None, None)  # (元データ, gzip 済み JSON)
         self._roads_wgs84 = None
+        self._buses = (None, None)  # (取得した時刻, 結果)
         self.has_time_index = db_connector.has_time_index()
         if not self.has_time_index:
             log.warning("pointed_road_data.get_at にインデックスがありません。"
@@ -233,6 +235,17 @@ class StatusService:
         start = max(start or data["window_start"], data["window_start"])
         end = min(end or data["window_end"], data["window_end"])
         return representative.segment_timeline(data["matched"], seg_id, start, end)
+
+    # ---- 車両の現在位置 ----------------------------------------------------
+    def buses(self, prefix):
+        t, data = self._buses
+        if data is None or time.monotonic() - t > config.BUS_CACHE_SECONDS:
+            data = bus_service.bus_positions()
+            self._buses = (time.monotonic(), data)
+        out = dict(data, buses=[dict(b) for b in data["buses"]])
+        for b in out["buses"]:
+            b["image_url"] = image_url(b.pop("image_path"), prefix)
+        return out
 
     # ---- 旧API互換 ---------------------------------------------------------
     def _legacy_json(self, data):

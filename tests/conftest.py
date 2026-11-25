@@ -66,6 +66,11 @@ OBSERVATIONS = [
     _obs("2026-01-10 11:00:00", 43.020 + OFF, 141.305, 3.0, "ice", "E"),
     # 時刻が不正
     (43.000 + OFF, 141.302, "not-a-time", 9.0, "image_x.jpg", "dry"),
+    # 車両の現在位置用（道路から離れた場所）: F が北へ移動、その近くに G（最新）。H は5分より前
+    _obs("2026-01-10 11:57:00", 43.0500, 141.350, 9.0, "dry", "F"),
+    _obs("2026-01-10 11:58:00", 43.0505, 141.350, 9.0, "dry", "F"),
+    _obs("2026-01-10 11:59:00", 43.0506, 141.3502, 8.0, "wet", "G"),
+    _obs("2026-01-10 11:50:00", 43.1000, 141.400, 9.0, "dry", "H"),
     # 24時間より前（現在モードの範囲外）
     _obs("2026-01-08 11:00:00", 43.000 + OFF, 141.302, 2.0, "ice", "A"),
 ]
@@ -109,3 +114,14 @@ def _build():
 
 
 _build()
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(scope="session")
+def client():
+    import generate_cache
+    generate_cache.main()
+    import app as app_module
+    return app_module.app.test_client()

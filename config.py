@@ -79,6 +79,13 @@ WIPS_WARN_MAX = 8.0     # これ未満: 注意
 
 # ---- 代表点選出 ---------------------------------------------------------
 # 同一車両の観測がこの時間以上空いたら別の「通過」とみなす [分]
+# 車両の現在位置: この分数以内の観測を表示し、この距離以内の点は最新の1点にまとめる
+BUS_RECENT_MINUTES = 5
+BUS_MERGE_DISTANCE_M = 100
+BUS_CACHE_SECONDS = 20          # 同じ結果を返す時間（多数の閲覧者で DB を叩かないため）
+
+# 代表点の選出方式: latest_pass_median（H: 最新通過の中央値, 採用）/ latest_pass_min_wips（B, 比較用）
+REPRESENTATIVE_METHOD = os.getenv("REPRESENTATIVE_METHOD", "latest_pass_median")
 PASS_GAP_MINUTES = 10
 
 # ---- 過去検索の負荷対策 -------------------------------------------------

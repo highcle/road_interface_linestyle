@@ -99,6 +99,11 @@
         </div>
         <div id="legendArea" class="legend"></div>
         <p class="legend-note">線が薄いほど古い観測です。チェックを外すと非表示になります。</p>
+        <div class="opt-list">
+          <label class="switch"><input type="checkbox" id="optGradient"> 隣の区間と色をなめらかにつなぐ</label>
+          <label class="switch"><input type="checkbox" id="optBuses"> バスの現在位置（5分以内の観測）</label>
+          <p id="busInfo" class="opt-note" aria-live="polite"></p>
+        </div>
       </section>
 
       <section class="card">
@@ -165,7 +170,7 @@
     <p>同じ画像の路面部分から、乾燥・半湿潤・湿潤・シャーベット・積雪・凍結の6区分を判別しています。凡例は滑りやすさの目安順に並べています。</p>
 
     <h3>区間の値の決め方（代表点）</h3>
-    <p>1つの区間に複数の観測がある場合は、<b>その区間を最後に通過した車両の観測のうち、WIPS が最も低い（視界が悪い）観測</b>を代表として表示します。WIPS・路面状態・時刻・画像はすべてこの1つの観測のものです。古い通過の情報は使わず、通過中のばらつきは安全側を採ります。</p>
+    <p>1つの区間に複数の観測がある場合は、<b>その区間を最後に通過した車両の観測のうち、WIPS がその通過の中央値に最も近い観測</b>を代表として表示します。WIPS・路面状態・時刻・画像はすべてこの1つの観測のものです。古い通過の情報は使わず、通過中に1枚だけ極端な値が出ても左右されません（中央値から等距離の観測が2つあるときは、視界の悪い方を採ります）。</p>
 
     <h3>注意事項</h3>
     <ul>

@@ -20,6 +20,8 @@ export const state = {
   status: null,            // /api/roads/status の結果
   selectedId: null,
   autoUpdate: true,
+  gradient: true,          // 線を隣の区間となめらかにつなぐ
+  showBuses: true,         // バスの現在位置を表示
 };
 
 export function loadPrefs() {
@@ -28,6 +30,8 @@ export function loadPrefs() {
     if (saved.indicator in INDICATORS) state.indicator = saved.indicator;
     if (saved.filters) Object.assign(state.filters, saved.filters);
     if (typeof saved.autoUpdate === 'boolean') state.autoUpdate = saved.autoUpdate;
+    if (typeof saved.gradient === 'boolean') state.gradient = saved.gradient;
+    if (typeof saved.showBuses === 'boolean') state.showBuses = saved.showBuses;
   } catch { /* 破損時は既定値 */ }
 }
 
@@ -35,6 +39,7 @@ export function savePrefs() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       indicator: state.indicator, filters: state.filters, autoUpdate: state.autoUpdate,
+      gradient: state.gradient, showBuses: state.showBuses,
     }));
   } catch { /* プライベートモード等 */ }
 }

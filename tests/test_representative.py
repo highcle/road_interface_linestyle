@@ -30,10 +30,12 @@ def test_latest_pass_wins_over_older_worse_pass():
         obs(0, "2026-01-10 11:00:20", 8.5, surface="wet"),
     ])
     rep = rp.select_representatives(df, START, END)[0]
+    # 最新通過 {9.0, 8.5} の中央値 8.75 から等距離 → 低い方（安全側）
     assert rep["wips"] == 8.5
     assert rep["road_surface"] == "wet"          # WIPS と同じ観測の路面状態
     assert rep["observed_at"] == "2026-01-10 11:00:20"
     assert rep["pass"]["n_obs"] == 2
+    assert rep["pass"]["wips_median"] == 8.75
     assert rep["stats"] == {
         "n_obs": 3, "n_passes": 2, "wips_min": 3.0, "wips_median": 8.5, "wips_max": 9.0,
         "first_at": "2026-01-10 08:00:00", "last_at": "2026-01-10 11:00:20",
@@ -49,6 +51,30 @@ def test_pass_split_by_gap_and_vehicle():
     ])
     passes = rp.assign_passes(df)
     assert passes.groupby("pass_key").size().sort_values().tolist() == [1, 1, 2]
+
+
+def test_median_ignores_single_outlier_in_pass():
+    df = frame([
+        obs(0, "2026-01-10 11:00:00", 9.2, surface="dry"),
+        obs(0, "2026-01-10 11:00:10", 2.0, surface="ice"),   # 1フレームだけの極端な値
+        obs(0, "2026-01-10 11:00:20", 9.0, surface="wet"),
+    ])
+    rep = rp.select_representatives(df, START, END)[0]
+    assert (rep["wips"], rep["road_surface"], rep["pass"]["wips_median"]) == (9.0, "wet", 9.0)
+    # 比較用の方式 B は最小値を採る
+    rep_b = rp.select_representatives(df, START, END, method="latest_pass_min_wips")[0]
+    assert (rep_b["wips"], rep_b["road_surface"]) == (2.0, "ice")
+
+
+def test_median_with_missing_values_uses_valid_ones():
+    df = frame([
+        obs(0, "2026-01-10 11:00:00", np.nan),
+        obs(0, "2026-01-10 11:00:10", 8.0),
+        obs(0, "2026-01-10 11:00:20", 9.0),
+        obs(0, "2026-01-10 11:00:30", 10.0),
+    ])
+    rep = rp.select_representatives(df, START, END)[0]
+    assert rep["wips"] == 9.0 and rep["pass"]["n_obs"] == 4
 
 
 def test_simultaneous_passes_choose_worse():
@@ -122,7 +148,7 @@ def test_load_observations_from_db_is_sorted_and_clean():
     df = load_observations(datetime(2026, 1, 9, 12), datetime(2026, 1, 10, 12))
     assert df["get_at"].is_monotonic_increasing
     assert not np.isinf(df["wips"].to_numpy(dtype=float)).any()
-    assert len(df) == 11  # 不正時刻1件と範囲外1件を除く
+    assert len(df) == 15  # 不正時刻1件と範囲外1件を除く
 
 
 @pytest.mark.parametrize("name,expected", [

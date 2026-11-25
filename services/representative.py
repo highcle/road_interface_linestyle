@@ -1,22 +1,25 @@
 """区間ごとの代表点（代表観測）の選出。
 
-採用アルゴリズム: 「最新通過内の最小WIPS観測（Latest-Pass Minimum WIPS）」
+採用アルゴリズム: H「最新通過の中央値（Latest-Pass Median）」
 
 1. 区間ごとに、同一車両の観測を時刻順に並べ、間隔が PASS_GAP_MINUTES を超えたら
    別の「通過（pass）」とする。1回の通過は、ほぼ同一時刻・同一車両・同一カメラによる
    同じ道路区間の観測なので、気象・路面条件は共通とみなせる。
 2. 区間内の通過のうち、最も新しい（終了時刻が最も遅い）通過を選ぶ。
    → 古い通過の情報は現在の状態を表さないため使わない（鮮度の確保）。
-   同時刻に複数車両が通過した場合は、最小WIPSが低い方（より悪い方）を選ぶ。
-3. その通過の観測のうち、WIPS が最小の観測を代表点とする。同値なら新しい方。
+   同時刻に複数車両が通過した場合は、通過内の WIPS 中央値が低い方（より悪い方）を選ぶ。
+3. その通過の WIPS 中央値を求め、中央値に最も近い観測を代表点とする。
    → 通過内の差はカメラの揺れ・対向車・遮蔽物などの短時間変動であり、
-     安全側（視程が悪い側）を採る。上流の WIPS 算出処理が10フレーム中の最小値を
-     採用し、その画像で路面状態を判別している考え方とも整合する。
-   通過内に有効な WIPS が1つもなければ、その通過の最新観測を代表点とする（WIPS は欠損）。
+     中央値を採ることで単発の外れ値（1フレームだけの極端な値）に左右されない。
+   中央値から等距離の観測が2つある場合（観測数が偶数のとき）は WIPS の低い方（安全側）、
+   それも同じなら新しい方。通過内に有効な WIPS が1つもなければ、その通過の最新観測を
+   代表点とする（WIPS は欠損）。
 
 代表点は「実在する1つの観測」なので、WIPS・路面状態・時刻・画像が必ず同じ観測に
-由来し、画像を見れば表示値の根拠を確認できる。
+由来し、画像を見れば表示値の根拠を確認できる。通過の中央値は pass.wips_median として返す。
 期間内の全観測の統計（件数、通過回数、WIPS 最小/中央値/最大）は参考情報として別に返す。
+
+比較用に、旧採用方式 B「最新通過内の最小WIPS観測」も config.REPRESENTATIVE_METHOD で選べる。
 """
 from datetime import datetime
 
@@ -25,11 +28,21 @@ import pandas as pd
 
 import config
 
-ALGORITHM = {
-    "id": "latest_pass_min_wips",
-    "name": "最新通過内の最小WIPS観測",
-    "description": "区間を最後に通過した車両の観測のうち、WIPSが最も低い（視程が悪い）観測を代表点とする",
+METHODS = {
+    "latest_pass_median": {
+        "id": "latest_pass_median",
+        "name": "最新通過の中央値",
+        "description": "区間を最後に通過した車両の観測のうち、WIPSが通過内の中央値に最も近い観測を代表点とする",
+    },
+    "latest_pass_min_wips": {
+        "id": "latest_pass_min_wips",
+        "name": "最新通過内の最小WIPS観測",
+        "description": "区間を最後に通過した車両の観測のうち、WIPSが最も低い（視程が悪い）観測を代表点とする",
+    },
 }
+if config.REPRESENTATIVE_METHOD not in METHODS:
+    raise ValueError(f"REPRESENTATIVE_METHOD が不正です: {config.REPRESENTATIVE_METHOD}（{', '.join(METHODS)}）")
+ALGORITHM = METHODS[config.REPRESENTATIVE_METHOD]
 
 
 def assign_passes(matched, gap_minutes=config.PASS_GAP_MINUTES):
@@ -60,7 +73,8 @@ def _num(x, nd=3):
     return None if x is None or pd.isna(x) else round(float(x), nd)
 
 
-def select_representatives(matched, start, end, gap_minutes=config.PASS_GAP_MINUTES):
+def select_representatives(matched, start, end, gap_minutes=config.PASS_GAP_MINUTES,
+                           method=config.REPRESENTATIVE_METHOD):
     """期間 [start, end] の観測から区間ごとの代表点を選ぶ。
 
     Returns:
@@ -81,16 +95,25 @@ def select_representatives(matched, start, end, gap_minutes=config.PASS_GAP_MINU
         t_end=("get_at", "max"),
         n=("obs_id", "size"),
         wmin=("wips", "min"),
+        wmed=("wips", "median"),
     )
-    passes["wmin_sort"] = passes["wmin"].fillna(np.inf)
-    # 区間ごとに最新の通過（同時刻なら WIPS の低い方）
-    latest = (passes.sort_values(["seg_id", "t_end", "wmin_sort"], ascending=[True, False, True])
+    median = method == "latest_pass_median"
+    # 同時刻に複数の通過があれば、悪い方（H: 中央値が低い / B: 最小値が低い）を選ぶ
+    passes["worse"] = (passes["wmed"] if median else passes["wmin"]).fillna(np.inf)
+    latest = (passes.sort_values(["seg_id", "t_end", "worse"], ascending=[True, False, True])
                     .groupby("seg_id").head(1))
 
-    # --- 最新通過内の代表観測: WIPS 最小（欠損は最後）、同値なら新しい方
+    # --- 最新通過内の代表観測（欠損 WIPS は最後）
     cand = df[df["pass_key"].isin(latest.index)].copy()
     cand["wips_sort"] = cand["wips"].fillna(np.inf)
-    rep = (cand.sort_values(["pass_key", "wips_sort", "get_at"], ascending=[True, True, False])
+    if median:
+        # H: 中央値に最も近い観測。等距離なら WIPS の低い方、同値なら新しい方
+        cand["dev"] = (cand["wips"] - cand["pass_key"].map(passes["wmed"])).abs().fillna(np.inf)
+        keys, asc = ["pass_key", "dev", "wips_sort", "get_at"], [True, True, True, False]
+    else:
+        # B: WIPS 最小。同値なら新しい方
+        keys, asc = ["pass_key", "wips_sort", "get_at"], [True, True, False]
+    rep = (cand.sort_values(keys, ascending=asc)
                .groupby("pass_key").head(1)
                .set_index("seg_id"))
 
@@ -124,6 +147,7 @@ def select_representatives(matched, start, end, gap_minutes=config.PASS_GAP_MINU
                 "start": _fmt(p["t_start"]),
                 "end": _fmt(p["t_end"]),
                 "n_obs": int(p["n"]),
+                "wips_median": _num(p["wmed"]),
             },
             "stats": {
                 "n_obs": int(s["n_obs"]),

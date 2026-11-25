@@ -6,6 +6,8 @@
 - 時間スライダー・プリセットで表示範囲を指定（範囲内の観測で代表点を選び直す）
 - 過去の任意の期間（最大7日）を検索
 - 区間をクリックすると、WIPS・路面状態・観測時刻・路面画像・推移グラフを表示
+- バスの現在位置（観測時刻が5分以内の最新観測）をアイコンで表示
+- 隣り合う区間の色をなめらかにつなぐグラデーション表示（切り替え可）
 - 注意が必要な区間の一覧、地名検索・現在地、表示状態の URL 共有、スマートフォン対応
 
 > 本リポジトリの `database.db` はテストデータです。本番環境では観測データがリアルタイムに送信され、DB に随時登録されます。
@@ -34,6 +36,7 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
               GET /api/roads/status          区間ごとの代表点（現在/過去、表示範囲指定）
               GET /api/roads/<id>/timeline   区間の観測の推移
               GET /api/roads/recent, /search 旧API（互換のため残している）
+              GET /api/buses                 バスの現在位置（5分以内の最新観測）
               GET /healthz                   キャッシュの鮮度（監視用）
                    ▲
                    │ リバースプロキシ (/WinterRoad-Overview-LineStyle)
@@ -51,7 +54,7 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 3. **紐付け**（`services/matcher.py`）
    平面直角座標系（EPSG:6679）で、各観測を最寄りの区間に紐付けます。50m より遠い観測は除外します。
 4. **代表点の選出**（`services/representative.py`）
-   区間ごとに **「最新通過内の最小WIPS観測」** を代表点とします。同じ車両の連続した観測（間隔10分以内）を1回の「通過」とみなし、最も新しい通過の中で WIPS が最も低い（視界が悪い）観測を選びます。WIPS・路面状態・時刻・画像はすべてこの1観測のものです。詳しくは[提案書](docs/representative_point_algorithms.md)を参照してください。
+   区間ごとに **「最新通過の中央値」（提案書の方式 H）** で代表点を選びます。同じ車両の連続した観測（間隔10分以内）を1回の「通過」とみなし、最も新しい通過の WIPS 中央値に最も近い観測を選びます（等距離なら WIPS の低い方）。WIPS・路面状態・時刻・画像はすべてこの1観測のものです。詳しくは[提案書](docs/representative_point_algorithms.md)を参照してください。
 5. **表示**（`static/js/`）
    道路形状は初回に1回だけ取得し、状態値（区間ID→代表点）だけを更新・再描画します。
 
@@ -87,6 +90,7 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 │   ├── matcher.py          # 観測→道路区間の紐付け
 │   ├── representative.py   # 代表点の選出アルゴリズム
 │   ├── status_service.py   # API 用の組み立て、キャッシュ、過去検索の制御
+│   ├── bus_service.py      # バスの現在位置
 │   └── legacy_api.py       # 旧API（/recent, /search）の互換出力
 ├── data/
 │   ├── road_attributes.csv       # 区間ごとの路線名・市町村（下記スクリプトで生成）
@@ -96,7 +100,8 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 │   ├── css/style.css
 │   ├── js/                 # ES Modules
 │   │   ├── main.js         # 起動・更新フロー
-│   │   ├── roadmap.js      # 地図・道路レイヤー・選択の強調
+│   │   ├── roadmap.js      # 地図・道路レイヤー（グラデーション描画）・選択の強調
+│   │   ├── buses.js        # バスの現在位置
 │   │   ├── timebar.js      # 時間スライダー
 │   │   ├── panel.js        # 凡例/フィルタ・注意区間一覧・詳細・推移グラフ
 │   │   ├── dialogs.js      # 過去検索・画像拡大・ヘルプ・地名検索
@@ -248,9 +253,11 @@ sudo systemctl restart apache2  # 再起動
 | `LIVE_WINDOW_HOURS` | 24 | 現在モードの時間幅 |
 | `MAX_SEARCH_DAYS` | 7 | 過去検索の最大日数 |
 | `MATCH_DISTANCE_M` | 50 | 紐付けの最大距離 [m] |
+| `REPRESENTATIVE_METHOD` | `latest_pass_median` | 代表点の方式（H: `latest_pass_median` 採用 / B: `latest_pass_min_wips` 比較用）。環境変数でも指定可 |
 | `PASS_GAP_MINUTES` | 10 | 同一車両の観測をこの間隔で「別の通過」とみなす [分] |
 | `WIPS_DANGER_MAX` / `WIPS_WARN_MAX` | 7.5 / 8.0 | 視程不良 / 注意 の閾値 |
 | `CACHE_STALE_MINUTES` | 15 | キャッシュが古いと判定する時間 [分] |
+| `BUS_RECENT_MINUTES` / `BUS_MERGE_DISTANCE_M` | 5 / 100 | バスの現在位置: 対象とする観測の新しさ [分] / 1つにまとめる距離 [m] |
 | `MAX_CONCURRENT_SEARCHES` | 2 | 過去検索の同時実行数の上限（超えると 503） |
 
 ---
@@ -264,6 +271,7 @@ sudo systemctl restart apache2  # 再起動
 | `GET /api/roads/geometry` | — | 全区間の形状（GeoJSON）。`properties.id` が区間ID |
 | `GET /api/roads/status` | `base_start`, `base_end`（過去検索の期間。省略時は直近24h）<br>`start`, `end`（その中で代表点を選ぶ範囲。省略時は全体） | 区間ID → 代表点（`wips`, `road_surface`, `observed_at`, `age_minutes`, `image_url`, `bus`, `pass`, `stats`）と、期間・鮮度などのメタ情報 |
 | `GET /api/roads/<id>/timeline` | `status` と同じ | 区間の観測一覧（時刻・WIPS・路面・車両・通過番号） |
+| `GET /api/buses` | — | バスの現在位置。観測時刻が5分以内の観測から車両ごとに最新の1点を選び、100m 以内の点は最新の1点にまとめる。`bus`, `lat`, `lon`, `observed_at`, `age_seconds`, `heading`（進行方向、真北=0°）, `wips`, `road_surface`, `image_url`, `merged`（まとめられた車両） |
 | `GET /healthz` | — | `ok`（200）/ `stale`・`no_cache`（503） |
 | `GET /api/roads/recent` | — | **旧API**。直近24時間・全区間の GeoJSON。`properties` は N13 の元属性・`display_route_name`・`wips`（期間内平均）・`road_surface`・`last_updated`・`image_path` |
 | `GET /api/roads/search` | `start_time`, `end_time` | **旧API**。指定期間（最大7日）で `/recent` と同じ形式 |
@@ -291,7 +299,7 @@ CREATE TABLE pointed_road_data (
 ```
 
 - `mesh_1km` / `mesh_10km` テーブルは別システムで使用しています（本アプリでは未使用。削除しないこと）。
-### インデックス（`scripts/create_indexes.sql`）— 未適用・要判断
+### インデックス（`scripts/create_indexes.sql`）— 導入決定（2026-11-25）
 
 **何をするか**: `pointed_road_data` の `get_at`（観測時刻）列に索引（`idx_pointed_road_data_get_at`）を1つ追加します。テーブルのデータ・列は一切変更しません。`DROP INDEX` で元に戻せます。
 
@@ -355,7 +363,7 @@ python -m pytest tests              # 単体・API・E2E（約15秒）
 python -m pytest tests --ignore=tests/e2e   # ブラウザなしの場合
 ```
 
-- テストは一時ディレクトリに作る小さな固定データ（道路4本・観測13件）で実行するため、`database.db` には触れません。
+- テストは一時ディレクトリに作る小さな固定データ（道路4本・観測17件）で実行するため、`database.db` には触れません。
 - E2E テストはシステムの Google Chrome を使います。ない場合は `playwright install chromium` を実行してください。
 
 ---

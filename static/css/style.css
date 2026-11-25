@@ -264,3 +264,30 @@ dialog p, dialog li { font-size: 13px; line-height: 1.7; }
   .banner { max-width: calc(100vw - 20px); font-size: 12px; }
   .leaflet-bottom.leaflet-left { bottom: 44px; }
 }
+
+/* ---- 表示オプション ---- */
+.opt-list { display: grid; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.opt-note { margin: 0 0 0 22px; font-size: 11px; color: var(--ink-3); }
+.opt-note:empty { display: none; }
+
+/* ---- バスの現在位置 ---- */
+.bus-icon { background: none; border: none; }
+.bus-marker { position: relative; width: 30px; height: 30px; }
+.bus-body {
+  position: absolute; inset: 3px; display: grid; place-items: center;
+  border-radius: 50%; background: #1d2733; color: #fff;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+}
+.bus-body svg { width: 15px; height: 15px; }
+.bus-id {
+  position: absolute; right: -6px; bottom: -4px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: #fff; color: #1d2733; border: 1px solid #1d2733;
+  font: 700 10px/13px system-ui, sans-serif; text-align: center;
+}
+/* 進行方向: アイコンの外周に付く三角（北=0° から時計回りに回転） */
+.bus-heading { position: absolute; inset: 0; pointer-events: none; }
+.bus-heading::before {
+  content: ""; position: absolute; left: 50%; top: -5px; transform: translateX(-50%);
+  border: 5px solid transparent; border-bottom: 7px solid #1d2733; border-top: 0;
+}
+.leaflet-tooltip.bus-tooltip { white-space: pre; font-size: 12px; line-height: 1.5; }

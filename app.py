@@ -111,6 +111,12 @@ def roads_status():
     ))
 
 
+@app.route("/api/buses")
+def buses():
+    """車両の現在位置（観測時刻が5分以内の最新観測。近い点はまとめる）。"""
+    return jsonify(service.buses(request.script_root))
+
+
 # ---- 旧API（他システムでの利用を確認中のため残している。services/legacy_api.py 参照）----
 @app.route("/api/roads/recent")
 def legacy_recent():

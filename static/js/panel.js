@@ -144,7 +144,9 @@ export function renderDetail(segId, rep, { onImage, timelinePromise }) {
           : `（表示範囲の終わりの${time.ageLabel(rep.age_minutes)}）`)),
       h('dt', {}, '観測車両'), h('dd', {}, rep.bus),
       h('dt', {}, '代表点'),
-      h('dd', {}, `最新の通過（${time.rangeLabel(time.parse(rep.pass.start), time.parse(rep.pass.end))}、${rep.pass.n_obs}観測）のうち WIPS 最小の観測`),
+      h('dd', {}, `最新の通過（${time.rangeLabel(time.parse(rep.pass.start), time.parse(rep.pass.end))}、${rep.pass.n_obs}観測）`,
+        state.status?.algorithm?.id === 'latest_pass_min_wips' ? 'のうち WIPS 最小の観測'
+          : `の WIPS 中央値${rep.pass.wips_median != null ? `（${rep.pass.wips_median.toFixed(2)}）` : ''}に最も近い観測`),
       h('dt', {}, '期間内'),
       h('dd', {}, `${s.n_obs}観測・${s.n_passes}回通過`,
         s.wips_min != null ? h('span', { class: 'muted' },
