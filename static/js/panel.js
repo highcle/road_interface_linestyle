@@ -79,11 +79,17 @@ export function renderAlertList(onPick) {
       h('span', { class: 'alert-main' },
         h('span', { class: 'alert-value' },
           state.indicator === 'wips' ? `WIPS ${rep.wips.toFixed(2)}` : cls.label),
-        h('span', { class: 'alert-sub' }, getLayer(id)?.feature.properties.label || '')),
+        h('span', { class: 'alert-sub' }, placeLabel(getLayer(id)?.feature.properties))),
       h('span', { class: 'alert-time' }, time.short(time.parse(rep.observed_at)),
         h('small', {}, time.ageLabel(rep.age_minutes))),
     ))));
   if (items.length > MAX) list.append(h('li', { class: 'empty' }, `ほか ${items.length - MAX} 区間`));
+}
+
+/** 一覧用の短い表記: 「国道5号 ・ 小樽市」 */
+function placeLabel(props) {
+  if (!props) return '';
+  return [props.label, props.muni].filter(Boolean).join(' ・ ');
 }
 
 // ---- 詳細 -----------------------------------------------------------------
@@ -91,6 +97,9 @@ export function renderDetail(segId, rep, { onImage, timelinePromise }) {
   const panel = el('detailPanel');
   const props = getLayer(segId)?.feature.properties || {};
   el('detailTitle').textContent = props.label || '選択区間';
+  // 路線名が分かった区間は「市町村 ・ 道路分類（幅員）」、分からない区間は市町村だけを添える
+  el('detailSub').textContent = [props.muni, props.label !== props.kind ? props.kind : '']
+    .filter(Boolean).join(' ・ ');
   const body = el('detailBody');
   panel.hidden = false;
 

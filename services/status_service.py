@@ -18,7 +18,7 @@ import pandas as pd
 import shapely
 
 import config
-from services import db_connector, representative
+from services import db_connector, legacy_api, representative
 from services.matcher import RoadMatcher
 from services.road_loader import load_roads
 
@@ -65,7 +65,8 @@ def build_geometry_file(gdf_roads, signature, cache_dir=config.CACHE_DIR):
     features = [
         {
             "type": "Feature",
-            "properties": {"id": int(seg_id), "label": row.label, "road_class": row.road_class},
+            "properties": {"id": int(seg_id), "label": row.label, "kind": row.kind,
+                           "muni": row.municipality, "road_class": row.road_class},
             "geometry": shapely.geometry.mapping(row.geometry),
         }
         for seg_id, row in zip(g.index, g.itertuples())
@@ -112,6 +113,8 @@ class StatusService:
         self._lock = threading.Lock()
         self._search_sem = threading.BoundedSemaphore(config.MAX_CONCURRENT_SEARCHES)
         self._search_cache = OrderedDict()
+        self._legacy_recent = (None, None)  # (元データ, gzip 済み JSON)
+        self._roads_wgs84 = None
         self.has_time_index = db_connector.has_time_index()
         if not self.has_time_index:
             log.warning("pointed_road_data.get_at にインデックスがありません。"
@@ -230,6 +233,26 @@ class StatusService:
         start = max(start or data["window_start"], data["window_start"])
         end = min(end or data["window_end"], data["window_end"])
         return representative.segment_timeline(data["matched"], seg_id, start, end)
+
+    # ---- 旧API互換 ---------------------------------------------------------
+    def _legacy_json(self, data):
+        if self._roads_wgs84 is None:
+            self._roads_wgs84 = self.roads.to_crs(epsg=4326)
+        return legacy_api.feature_collection(self._roads_wgs84, data["matched"])
+
+    def legacy_recent_gz(self):
+        """/api/roads/recent: 直近24時間（gzip 済み）。キャッシュが更新されるまで使い回す。"""
+        data = self.recent()
+        src, body = self._legacy_recent
+        if src is not data:
+            body = gzip.compress(self._legacy_json(data).encode("utf-8"), compresslevel=5)
+            self._legacy_recent = (data, body)
+        return body
+
+    def legacy_search(self, start, end):
+        """/api/roads/search: 指定期間（期間上限などは過去検索と同じ）。"""
+        self.validate_history_range(start, end)
+        return self._legacy_json(self.history(start, end))
 
     def health(self):
         out = {"status": "ok", "now": config.now().strftime(config.TIME_FORMAT),

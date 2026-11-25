@@ -76,8 +76,6 @@ def clean_observations(df):
     df.loc[df["road_surface"] == "", "road_surface"] = pd.NA
     bus = df["image_path"].astype("string").str.extract(IMAGE_RE)["bus"]
     df["bus"] = bus.fillna("unknown")
-    if config.WIPS_EXCLUDED_BUSES:
-        df.loc[df["bus"].isin(config.WIPS_EXCLUDED_BUSES), "wips"] = np.nan
 
     if bad_time.any() or bad_pos.any():
         log.info("時刻または位置が不正な観測 %d 件を除外しました", int(bad_time.sum() + bad_pos.sum()))

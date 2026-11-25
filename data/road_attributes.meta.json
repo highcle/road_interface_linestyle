@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-11-25T18:20:33",
+  "sources": {
+    "osm": {
+      "file": "hokkaido.osm.pbf",
+      "license": "ODbL 1.0 (© OpenStreetMap contributors)"
+    },
+    "n03": {
+      "file": "N03-20250101_01.shp",
+      "license": "国土数値情報（行政区域データ）国土交通省 / CC BY 4.0 互換"
+    }
+  },
+  "params": {
+    "sample_step_m": 20,
+    "min_samples": 3,
+    "match_radius_m": 20,
+    "max_angle_deg": 30,
+    "min_share": 0.6,
+    "muni_max_dist_m": 500
+  },
+  "coverage": {
+    "segments": 47410,
+    "route": {
+      "1": 0.98,
+      "2": 0.953,
+      "4": 0.738
+    },
+    "municipality": 1.0
+  }
+}

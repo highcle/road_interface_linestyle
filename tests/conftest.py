@@ -16,12 +16,14 @@ WORK = tempfile.mkdtemp(prefix="winterroad_test_")
 GEOJSON_DIR = os.path.join(WORK, "geojson")
 DB_PATH = os.path.join(WORK, "test.db")
 CACHE_DIR = os.path.join(WORK, "cache")
+ATTRIBUTES_PATH = os.path.join(WORK, "road_attributes.csv")
 FIXED_NOW = "2026-01-10 12:00:00"
 
 os.environ.update({
     "GEOJSON_DIR": GEOJSON_DIR,
     "DB_PATH": DB_PATH,
     "CACHE_DIR": CACHE_DIR,
+    "ROAD_ATTRIBUTES_PATH": ATTRIBUTES_PATH,
     "APP_FIXED_NOW": FIXED_NOW,
     "APP_PREFIX": "/WinterRoad-Overview-LineStyle",
 })
@@ -80,6 +82,16 @@ def _build():
     ]
     with open(os.path.join(GEOJSON_DIR, "N13-test.geojson"), "w", encoding="utf-8") as f:
         json.dump({"type": "FeatureCollection", "features": features}, f)
+
+    # 路線名・市町村: seg 0 は正しく突合できる行、seg 1 は位置がずれた行（使われない）、seg 2 は行なし
+    import geopandas as gpd
+    from shapely.geometry import LineString
+    lines = gpd.GeoSeries([LineString(c) for _, _, c in ROADS], crs="EPSG:6668")
+    mid = lines.to_crs(6679).interpolate(0.5, normalized=True).to_crs(6668)
+    with open(ATTRIBUTES_PATH, "w", encoding="utf-8") as f:
+        f.write("src,fidx,mid_lon,mid_lat,office,municipality,route,route_share\n")
+        f.write(f"N13-test.geojson,0,{mid.x[0]:.6f},{mid.y[0]:.6f},石狩振興局,札幌市南区,国道5号,1.0\n")
+        f.write(f"N13-test.geojson,1,{mid.x[1] + 0.001:.6f},{mid.y[1]:.6f},石狩振興局,札幌市南区,道道1号 テスト線,1.0\n")
 
     conn = sqlite3.connect(DB_PATH)
     conn.executescript("""

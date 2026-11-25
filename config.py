@@ -18,6 +18,8 @@ def _path(env, default):
 GEOJSON_DIR = _path("GEOJSON_DIR", "geojson")
 DB_PATH = _path("DB_PATH", "database.db")
 CACHE_DIR = _path("CACHE_DIR", "cache")
+# 区間ごとの路線名・市町村（scripts/build_road_attributes.py で作成）。無ければ付与しない。
+ROAD_ATTRIBUTES_PATH = _path("ROAD_ATTRIBUTES_PATH", os.path.join("data", "road_attributes.csv"))
 
 # ---- Web ----------------------------------------------------------------
 # Apache の公開パス。プレフィックスの有無どちらの URL でもアクセスできる。
@@ -67,13 +69,9 @@ METRIC_CRS = 6679               # 距離計算用 平面直角座標系（JGD201
 
 # WIPS の有効範囲。範囲外の値は「WIPS 欠損」として扱う（路面状態は残す）。
 # 非有限値(±Inf, NaN)は常に欠損扱い。None は制限なし。
-# 例: bus_K の 2026/04〜09 は 14〜16 付近に分布しており、他車両と尺度が異なる可能性がある。
+# 車両単位の除外は行わない方針（すべての車両の値を同じ基準で扱う）。
 WIPS_VALID_MIN = float(os.getenv("WIPS_VALID_MIN")) if os.getenv("WIPS_VALID_MIN") else None
 WIPS_VALID_MAX = float(os.getenv("WIPS_VALID_MAX")) if os.getenv("WIPS_VALID_MAX") else None
-
-# WIPS を欠損扱いにする車両（カンマ区切り、例: WIPS_EXCLUDED_BUSES="J,K"）。
-# カメラの汚れ・故障などで WIPS が信頼できない車両を一時的に除外する。路面状態は残す。
-WIPS_EXCLUDED_BUSES = {b.strip() for b in os.getenv("WIPS_EXCLUDED_BUSES", "").split(",") if b.strip()}
 
 # WIPS の判定閾値（画面の色分けと一致させる）
 WIPS_DANGER_MAX = 7.5   # これ以下: 視程不良（危険）

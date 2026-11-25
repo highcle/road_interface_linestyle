@@ -24,6 +24,9 @@ export function initMap({ view, onSegmentClick, onBackgroundClick }) {
     maxZoom: 18,
     attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>',
   }).addTo(map);
+  // 区間の路線名・市町村（scripts/build_road_attributes.py）の出典
+  map.attributionControl.addAttribution(
+    '道路: 国土数値情報（道路・行政区域） / 路線名: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
   map.createPane('highlight').style.zIndex = 450;
 
   if (view) map.setView([view.lat, view.lng], view.zoom);

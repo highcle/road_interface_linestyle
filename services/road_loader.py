@@ -11,12 +11,14 @@ import os
 import pickle
 
 import geopandas as gpd
+import numpy as np
+import pandas as pd
 
 import config
 
 log = logging.getLogger(__name__)
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 
 def _source_files(geojson_dir):
@@ -26,12 +28,16 @@ def _source_files(geojson_dir):
     return sorted(files)
 
 
-def roads_signature(geojson_dir=config.GEOJSON_DIR, target_types=config.TARGET_ROAD_TYPES):
+def roads_signature(geojson_dir=config.GEOJSON_DIR, target_types=config.TARGET_ROAD_TYPES,
+                    attributes_path=config.ROAD_ATTRIBUTES_PATH):
     """元データと抽出条件から決まる識別子。道路IDの整合性チェックに使う。"""
     h = hashlib.sha1(f"v{CACHE_VERSION}|{sorted(target_types)}".encode())
     for f in _source_files(geojson_dir):
         st = os.stat(f)
         h.update(f"{os.path.basename(f)}|{st.st_size}|{int(st.st_mtime)}".encode())
+    if attributes_path and os.path.exists(attributes_path):
+        with open(attributes_path, "rb") as f:
+            h.update(hashlib.sha1(f.read()).digest())
     return h.hexdigest()[:12]
 
 
@@ -45,6 +51,39 @@ def road_label(props):
     return f"{cls}（{width}）" if width else cls
 
 
+N13_KEYS = tuple(f"N13_{i:03d}" for i in range(1, 9))
+ATTRIBUTE_COLUMNS = ("route", "municipality", "office")
+
+
+def attach_attributes(gdf, path=config.ROAD_ATTRIBUTES_PATH):
+    """路線名・市町村を付与し、表示ラベルを路線名に差し替える。
+
+    突合キーは (元ファイル名, ファイル内の順番)。道路データが差し替わって中身がずれて
+    いないか、区間の中点の位置でも確かめる（約1m以上ずれた行は使わない）。
+    """
+    for c in ATTRIBUTE_COLUMNS:
+        gdf[c] = ""
+    if not path or not os.path.exists(path):
+        log.info("路線名・市町村データがありません（%s）。道路分類で表示します", path)
+        return gdf
+    attrs = pd.read_csv(path, dtype={"src": str, "fidx": int}, keep_default_na=False)
+    merged = gdf[["src", "fidx"]].reset_index().merge(attrs, on=["src", "fidx"], how="left")
+    merged = merged.drop_duplicates("seg_id").set_index("seg_id").reindex(gdf.index)
+    mid = gdf.geometry.to_crs(config.METRIC_CRS).interpolate(0.5, normalized=True).to_crs(gdf.crs)
+    lon = pd.to_numeric(merged["mid_lon"], errors="coerce").to_numpy()
+    lat = pd.to_numeric(merged["mid_lat"], errors="coerce").to_numpy()
+    ok = (np.abs(mid.x.to_numpy() - lon) < 1e-5) & (np.abs(mid.y.to_numpy() - lat) < 1e-5)
+    if (~ok).sum():
+        log.warning("路線名・市町村データの %d 区間が道路データと一致しません。"
+                    "scripts/build_road_attributes.py を再実行してください", int((~ok).sum()))
+    for c in ATTRIBUTE_COLUMNS:
+        gdf[c] = merged[c].where(ok, "").fillna("").astype(str).to_numpy()
+    has_route = gdf["route"] != ""
+    gdf.loc[has_route, "label"] = gdf.loc[has_route, "route"]
+    log.info("路線名 %d / 市町村 %d 区間を付与しました", int(has_route.sum()), int((gdf["municipality"] != "").sum()))
+    return gdf
+
+
 def _load_from_geojson(geojson_dir, target_types):
     features = []
     for fpath in _source_files(geojson_dir):
@@ -55,7 +94,8 @@ def _load_from_geojson(geojson_dir, target_types):
             log.warning("道路データを読み込めませんでした: %s (%s)", fpath, e)
             continue
         items = data.get("features", []) if data.get("type") == "FeatureCollection" else [data]
-        for item in items:
+        src = os.path.basename(fpath)
+        for fidx, item in enumerate(items):
             props = item.get("properties") or {}
             if str(props.get("N13_003")) in target_types:
                 features.append({
@@ -65,6 +105,12 @@ def _load_from_geojson(geojson_dir, target_types):
                         "road_class": str(props.get("N13_003")),
                         "width_class": str(props.get("N13_006")),
                         "label": road_label(props),
+                        "kind": road_label(props),  # 道路分類（幅員）。label は路線名に差し替わることがある
+                        # 元データ上の位置。外部データで付けた属性(road_attributes)との突合キー
+                        "src": src,
+                        "fidx": fidx,
+                        # 旧API（/api/roads/recent, /search）の互換出力用に元の属性も保持する
+                        **{k: props.get(k) for k in N13_KEYS},
                     },
                 })
     if not features:
@@ -93,7 +139,7 @@ def load_roads(geojson_dir=config.GEOJSON_DIR, target_types=config.TARGET_ROAD_T
         return gdf, sig
 
     log.info("道路データを GeoJSON から読み込みます: %s", geojson_dir)
-    gdf = _load_from_geojson(geojson_dir, target_types)
+    gdf = attach_attributes(_load_from_geojson(geojson_dir, target_types))
     tmp = cache_path + ".tmp"
     with open(tmp, "wb") as f:
         pickle.dump(gdf, f, protocol=pickle.HIGHEST_PROTOCOL)

@@ -33,6 +33,7 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
               GET /api/roads/geometry        道路形状（gzip・ETag でブラウザにキャッシュ）
               GET /api/roads/status          区間ごとの代表点（現在/過去、表示範囲指定）
               GET /api/roads/<id>/timeline   区間の観測の推移
+              GET /api/roads/recent, /search 旧API（互換のため残している）
               GET /healthz                   キャッシュの鮮度（監視用）
                    ▲
                    │ リバースプロキシ (/WinterRoad-Overview-LineStyle)
@@ -44,7 +45,7 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 ### 処理の流れ
 
 1. **道路データ**（`services/road_loader.py`）
-   `geojson/` の国土数値情報 道路（N13）から、`N13_003`（道路分類）が対象（既定: 国道・都道府県道・高速自動車国道等）の区間を抽出します。抽出結果は `cache/roads_<署名>.pkl` に保存し、元ファイルが変わるまで再利用します。抽出順の番号が **区間ID（seg_id）** です。
+   `geojson/` の国土数値情報 道路（N13）から、`N13_003`（道路分類）が対象（既定: 国道・都道府県道・高速自動車国道等）の区間を抽出します。`data/road_attributes.csv` があれば路線名・市町村を付けます（[後述](#路線名市町村データ)）。抽出結果は `cache/roads_<署名>.pkl` に保存し、元ファイルが変わるまで再利用します。抽出順の番号が **区間ID（seg_id）** です。
 2. **観測データ**（`services/db_connector.py`）
    期間内の観測を時刻順に取得し、クレンジングします（時刻・位置の不正な行を除外、WIPS の ±Inf などを欠損扱い、画像名から車両記号を抽出）。
 3. **紐付け**（`services/matcher.py`）
@@ -85,7 +86,11 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 │   ├── db_connector.py     # 観測データの取得・クレンジング（読み取り専用）
 │   ├── matcher.py          # 観測→道路区間の紐付け
 │   ├── representative.py   # 代表点の選出アルゴリズム
-│   └── status_service.py   # API 用の組み立て、キャッシュ、過去検索の制御
+│   ├── status_service.py   # API 用の組み立て、キャッシュ、過去検索の制御
+│   └── legacy_api.py       # 旧API（/recent, /search）の互換出力
+├── data/
+│   ├── road_attributes.csv       # 区間ごとの路線名・市町村（下記スクリプトで生成）
+│   └── road_attributes.meta.json # 生成日時・出典・付与率
 ├── templates/index.html
 ├── static/
 │   ├── css/style.css
@@ -101,7 +106,9 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 │   │   ├── api.js / time.js
 │   ├── vendor/             # Leaflet 1.9.4, noUiSlider 15.7.1（同梱）
 │   └── images/             # 路面画像（※リポジトリ外。シンボリックリンクで配置）
-├── scripts/create_indexes.sql  # DB インデックス（DB 管理者と調整のうえ適用）
+├── scripts/
+│   ├── build_road_attributes.py  # 路線名・市町村の付与（OSM・行政区域と突合。オフライン）
+│   └── create_indexes.sql        # DB インデックス（DB 管理者と調整のうえ適用）
 ├── tests/                  # 単体・API・E2E テスト
 └── docs/
 ```
@@ -230,8 +237,8 @@ sudo systemctl restart apache2  # 再起動
 | `APP_HOST` / `APP_PORT` | `0.0.0.0` / `5100` | 待受アドレス・ポート |
 | `APP_TIMEZONE` | `Asia/Tokyo` | DB の時刻（`get_at`）のタイムゾーン |
 | `APP_FIXED_NOW` | なし | テスト用に基準時刻を固定（本番では設定しない） |
+| `ROAD_ATTRIBUTES_PATH` | `./data/road_attributes.csv` | 路線名・市町村データ。なければ道路分類で表示 |
 | `WIPS_VALID_MIN` / `WIPS_VALID_MAX` | なし | 範囲外の WIPS を欠損扱いにする |
-| `WIPS_EXCLUDED_BUSES` | なし | WIPS を欠損扱いにする車両（例: `J,K`）。路面状態は残す |
 
 `config.py` で変更する値:
 
@@ -258,6 +265,10 @@ sudo systemctl restart apache2  # 再起動
 | `GET /api/roads/status` | `base_start`, `base_end`（過去検索の期間。省略時は直近24h）<br>`start`, `end`（その中で代表点を選ぶ範囲。省略時は全体） | 区間ID → 代表点（`wips`, `road_surface`, `observed_at`, `age_minutes`, `image_url`, `bus`, `pass`, `stats`）と、期間・鮮度などのメタ情報 |
 | `GET /api/roads/<id>/timeline` | `status` と同じ | 区間の観測一覧（時刻・WIPS・路面・車両・通過番号） |
 | `GET /healthz` | — | `ok`（200）/ `stale`・`no_cache`（503） |
+| `GET /api/roads/recent` | — | **旧API**。直近24時間・全区間の GeoJSON。`properties` は N13 の元属性・`display_route_name`・`wips`（期間内平均）・`road_surface`・`last_updated`・`image_path` |
+| `GET /api/roads/search` | `start_time`, `end_time` | **旧API**。指定期間（最大7日）で `/recent` と同じ形式 |
+
+旧API は他システムでの利用を確認するまで残しています。旧実装からの変更点（不具合修正のみ）は [課題点レポート 8章](docs/issues_report.md#8-改修で新たに分かったこと変更点) を参照してください。
 
 入力が不正な場合は `400 {"error": "理由"}`、過去検索が混雑している場合は `503` を返します。
 
@@ -280,7 +291,59 @@ CREATE TABLE pointed_road_data (
 ```
 
 - `mesh_1km` / `mesh_10km` テーブルは別システムで使用しています（本アプリでは未使用。削除しないこと）。
-- 期間検索の高速化には `get_at` のインデックスが有効です（`scripts/create_indexes.sql`）。DB は共有のため、適用は DB 管理者と調整してください。
+### インデックス（`scripts/create_indexes.sql`）— 未適用・要判断
+
+**何をするか**: `pointed_road_data` の `get_at`（観測時刻）列に索引（`idx_pointed_road_data_get_at`）を1つ追加します。テーブルのデータ・列は一切変更しません。`DROP INDEX` で元に戻せます。
+
+**なぜ必要か**: このアプリは「ある期間の観測」を `WHERE get_at >= ? AND get_at <= ?` で取り出します（cron で5分ごとに直近24時間、過去検索で最大7日）。索引がないと SQLite は**毎回テーブル全行を読む**ため、DB が大きくなるほど遅くなります。本番は観測が増え続けるので、時間とともに cron・過去検索が遅くなっていきます。
+
+**効果と影響**（テストDB 433MB・431万行のコピーで計測）:
+
+| 項目 | 索引なし | 索引あり |
+|---|---|---|
+| 直近1時間の取得 | 446 ms | 1 ms |
+| 直近24時間（cron と同じ） | 452 ms | 7 ms |
+| 7日間 | 564 ms | 110 ms |
+| 実行計画 | テーブル全件走査 | 索引で範囲検索 |
+| DB ファイルサイズ | 433 MB | +121 MB |
+| 観測の登録（INSERT 2000件） | 10.5 秒 | 10.8 秒（差は誤差程度） |
+
+- 作成には約3秒かかり、その間は DB への書き込み（他システムの登録）が待たされます。登録の少ない時間帯に実行してください。
+- 他システムの読み取り・書き込みの動作は変わりません（時刻で検索する処理があれば、それも速くなります）。
+
+```bash
+sqlite3 database.db < scripts/create_indexes.sql                              # 適用
+sqlite3 database.db "DROP INDEX IF EXISTS idx_pointed_road_data_get_at;"      # 取り消し
+```
+
+アプリは起動時に索引の有無を確認し、なければログに警告を出します（`/healthz` の `db_time_index`）。
+
+---
+
+## 路線名・市町村データ
+
+国土数値情報 道路（N13）には路線名の属性がないため、外部データと突合して `data/road_attributes.csv` を作っています。アプリはこの CSV だけを読むので、本番サーバーに外部データは不要です。
+
+| 項目 | 出典 | 方法 |
+|---|---|---|
+| 路線名 | OpenStreetMap（[Geofabrik 北海道抽出](https://download.geofabrik.de/asia/japan/hokkaido.html)） | 区間に沿って約20mごとに標本点を取り、道路分類が対応する OSM の道（国道↔trunk、道道↔primary/secondary、高速↔motorway）のうち 20m 以内・向きの差 30° 以内で最も近いものを探す。標本点の 60% 以上が同じ路線なら採用 |
+| 市町村・振興局 | [国土数値情報 行政区域（N03）](https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html) 北海道 | 区間の中点を含む行政区域 |
+
+付与率（2025年1月版 N03、2026年11月の OSM）: 国道 98%・道道 95%・高速 74%（未付与の多くは IC ランプ）・市町村 100%。路線名が分からない区間は「国道（幅員5.5〜13m）」のように道路分類で表示します。
+
+**道路データ（geojson）を差し替えたときは再生成してください**（区間の対応が取れない行は使われず、ログに警告が出ます）:
+
+```bash
+# 外部データを取得（作業用ディレクトリで）
+curl -LO https://download.geofabrik.de/asia/japan/hokkaido-latest.osm.pbf
+curl -LO https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-2025/N03-20250101_01_GML.zip && unzip N03-20250101_01_GML.zip
+# 生成（約1分）→ data/road_attributes.csv
+venv/bin/python scripts/build_road_attributes.py --osm hokkaido-latest.osm.pbf --n03 N03-20250101_01.shp
+# キャッシュを作り直してアプリを再起動
+venv/bin/python generate_cache.py
+```
+
+**ライセンス**: 路線名は OpenStreetMap 由来のため、`road_attributes.csv` は [ODbL](https://opendatacommons.org/licenses/odbl/) の派生データベースにあたります。地図には「© OpenStreetMap contributors」を表示しています。CSV 自体を外部に公開・配布する場合は ODbL に従う必要があります。行政区域は国土数値情報（出典の記載が必要）です。
 
 ---
 

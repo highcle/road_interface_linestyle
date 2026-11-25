@@ -81,7 +81,7 @@ def test_geometry_gzip_and_etag(client):
     assert r.status_code == 200 and r.headers["Content-Encoding"] == "gzip"
     d = json.loads(gzip.decompress(r.data))
     assert [f["properties"]["id"] for f in d["features"]] == [0, 1, 2]
-    assert d["features"][0]["properties"]["label"] == "国道（幅員13〜19.5m）"
+    assert d["features"][0]["properties"]["kind"] == "国道（幅員13〜19.5m）"
     etag = r.headers["ETag"]
     r2 = client.get("/api/roads/geometry", headers={"Accept-Encoding": "gzip", "If-None-Match": etag})
     assert r2.status_code == 304
@@ -126,3 +126,54 @@ def test_range_outside_window_falls_back_to_whole_window(client):
     r, d = get_json(client, "/api/roads/status?start=2026-01-08 08:00:00&end=2026-01-08 10:00:00")
     assert r.status_code == 200
     assert d["range"] == d["window"]
+
+
+def test_geometry_has_route_and_municipality(client):
+    r = client.get("/api/roads/geometry")
+    props = {f["properties"]["id"]: f["properties"] for f in json.loads(r.data)["features"]}
+    assert props[0]["label"] == "国道5号"
+    assert props[0]["muni"] == "札幌市南区"
+    assert props[0]["kind"] == "国道（幅員13〜19.5m）"
+    # 位置が一致しない行は使わない → 道路分類で表示
+    assert props[1]["label"] == props[1]["kind"] == "都道府県道（幅員5.5〜13m）"
+    assert props[1]["muni"] == ""
+    assert props[2]["muni"] == ""
+
+
+LEGACY_KEYS = {f"N13_{i:03d}" for i in range(1, 9)} | {
+    "display_route_name", "wips", "road_surface", "last_updated", "image_path"}
+
+
+def test_legacy_recent(client):
+    for headers in ({}, {"Accept-Encoding": "gzip"}):
+        r = client.get("/api/roads/recent", headers=headers)
+        assert r.status_code == 200
+        body = gzip.decompress(r.data) if r.headers.get("Content-Encoding") == "gzip" else r.data
+        data = json.loads(body)  # -Inf を含んでいても正しい JSON
+        assert data["type"] == "FeatureCollection"
+        f = {x["id"]: x for x in data["features"]}
+        assert set(f) == {"0", "1", "2"}  # データのない区間も含む全区間
+        p0 = f["0"]["properties"]
+        assert set(p0) == LEGACY_KEYS
+        assert p0["N13_003"] == "1" and p0["N13_005"] == 0
+        assert p0["display_route_name"] == "国道5号"
+        # 旧実装と同じ集計: WIPS は期間内の平均、他は最後の観測
+        assert p0["wips"] == round((5.0 + 5.5 + 9.0 + 8.2 + 9.5) / 5, 2)
+        assert p0["road_surface"] == "dry"
+        assert p0["last_updated"] == "2026-01-10 11:00:30"
+        assert p0["image_path"] == "image_100126_110030_1_bus_A.jpg"
+        # 異常値(-Inf)は平均から除く
+        assert f["2"]["properties"]["wips"] == 9.0
+        assert f["2"]["properties"]["road_surface"] == "fresh"
+
+
+def test_legacy_search(client):
+    r, data = get_json(client, "/api/roads/search?start_time=2026-01-10 10:30:00&end_time=2026-01-10 12:00:00")
+    assert r.status_code == 200
+    f = {x["id"]: x["properties"] for x in data["features"]}
+    assert f["0"]["wips"] == round((9.0 + 8.2 + 9.5) / 3, 2)
+    assert f["1"]["wips"] is None and f["1"]["last_updated"] is None
+    r, data = get_json(client, "/api/roads/search")
+    assert r.status_code == 400
+    r, data = get_json(client, "/api/roads/search?start_time=2026-01-01 00:00:00&end_time=2026-01-10 00:00:00")
+    assert r.status_code == 400

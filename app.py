@@ -111,6 +111,25 @@ def roads_status():
     ))
 
 
+# ---- 旧API（他システムでの利用を確認中のため残している。services/legacy_api.py 参照）----
+@app.route("/api/roads/recent")
+def legacy_recent():
+    """直近24時間・全区間の GeoJSON（旧形式: WIPS は期間内の平均）。"""
+    body = service.legacy_recent_gz()
+    if "gzip" in request.headers.get("Accept-Encoding", ""):
+        return Response(body, mimetype="application/json",
+                        headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+    return Response(gzip.decompress(body), mimetype="application/json")
+
+
+@app.route("/api/roads/search")
+def legacy_search():
+    """指定期間・全区間の GeoJSON（旧形式）。パラメータ: start_time, end_time"""
+    start = parse_time(request.args.get("start_time"), "start_time")
+    end = parse_time(request.args.get("end_time"), "end_time")
+    return Response(service.legacy_search(start, end), mimetype="application/json")
+
+
 @app.route("/api/roads/<int:seg_id>/timeline")
 def road_timeline(seg_id):
     if seg_id < 0 or seg_id >= len(service.roads):

@@ -1,5 +1,14 @@
--- pointed_road_data の期間検索を高速化するインデックス。
--- DB は他システムと共有しているため、適用は DB 管理者と調整のうえで行うこと。
--- 適用:   sqlite3 database.db < scripts/create_indexes.sql
--- 取り消し: DROP INDEX IF EXISTS idx_pointed_road_data_get_at;
+-- pointed_road_data の「観測時刻 get_at」に索引を1つ追加する。
+--
+-- 目的: このアプリは期間を指定して観測を取り出す
+--         SELECT ... FROM pointed_road_data WHERE get_at >= ? AND get_at <= ?
+--       索引がないと毎回テーブル全行を読むため、DB が大きくなるほど遅くなる。
+--       （テストDB 431万行で 直近24時間の取得 452ms → 7ms、7日間 564ms → 110ms）
+-- 影響: テーブルのデータ・列は変更しない。DB ファイルが約3割（テストDBで +121MB）増える。
+--       作成中（テストDBで約3秒）は他システムの書き込みが待たされる。
+--       登録時の負荷増は計測誤差程度。
+-- 注意: DB は他システムと共有しているため、適用は DB 管理者と調整のうえ行うこと。
+--
+-- 適用:     sqlite3 database.db < scripts/create_indexes.sql
+-- 取り消し: sqlite3 database.db "DROP INDEX IF EXISTS idx_pointed_road_data_get_at;"
 CREATE INDEX IF NOT EXISTS idx_pointed_road_data_get_at ON pointed_road_data(get_at);
