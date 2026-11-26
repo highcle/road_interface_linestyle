@@ -120,20 +120,6 @@ h1, h2, h3 { margin: 0; }
 .locate-btn { width: 34px; height: 34px; background: #fff; border: 2px solid rgba(0,0,0,.2); cursor: pointer; font-size: 18px; }
 .locate-btn:hover { background: #f4f4f4; }
 
-.map-search {
-  position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 6px;
-  background: #fff; padding: 6px; border-radius: 8px; box-shadow: var(--shadow);
-}
-.map-search input { width: 200px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
-.place-results {
-  position: absolute; top: 100%; left: 0; right: 0; margin: 4px 0 0; padding: 4px; list-style: none;
-  background: #fff; border-radius: 8px; box-shadow: var(--shadow); max-height: 260px; overflow: auto;
-}
-.place-results li { font-size: 13px; }
-.place-results li.muted { padding: 6px 8px; }
-.place-results button { width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-.place-results button:hover { background: var(--accent-weak); }
-
 #svgOverlay { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1050; }
 .connector { fill: none; stroke: #1c2430; stroke-width: 2; stroke-dasharray: 5 4; opacity: .75; }
 .connector-dot { fill: #fff; stroke: #1c2430; stroke-width: 2.5; }
@@ -244,9 +230,6 @@ dialog p, dialog li { font-size: 13px; line-height: 1.7; }
   .timebar-head { flex-direction: column; align-items: stretch; gap: 4px; }
   .time-label { font-size: 13px; }
   .presets .chip { padding: 2px 8px; }
-  .map-search { top: auto; bottom: 74px; left: 50%; transform: translateX(-50%); }
-  .map-search input { width: 52vw; }
-  .map-search .btn { white-space: nowrap; }
   #panel { left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 62vh; }
   .panel-toggle { align-self: stretch; margin: 0; border-radius: 14px 14px 0 0; box-shadow: 0 -2px 10px rgba(0,0,0,.12); padding: 10px; }
   .panel-body { background: var(--bg); padding: 8px; gap: 8px; }

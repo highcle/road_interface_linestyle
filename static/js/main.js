@@ -6,7 +6,7 @@ import { initMap, setGeometry, restyle, highlightSelected, zoomTo, ensureVisible
 import { initTimebar, setWindow, setRange, setModeLabel, disableTimebar } from './timebar.js';
 import { renderLegend, renderAlertList, renderDetail, hideDetail } from './panel.js';
 import { updateConnector } from './connector.js';
-import { initHistoryDialog, initImageDialog, initHelpDialog, initPlaceSearch } from './dialogs.js';
+import { initHistoryDialog, initImageDialog, initHelpDialog } from './dialogs.js';
 import { initBuses, refreshBuses } from './buses.js';
 
 const AUTO_UPDATE_MS = 5 * 60 * 1000;
@@ -218,7 +218,6 @@ async function boot() {
   initTimebar(() => { clearTimeout(sliderTimer); sliderTimer = setTimeout(load, 150); });
   initPanelToggle();
   initHelpDialog();
-  initPlaceSearch();
   openImage = initImageDialog();
   const historyDialog = initHistoryDialog(goHistory);
   initBuses({ onImageClick: (b) => openImage(b) });

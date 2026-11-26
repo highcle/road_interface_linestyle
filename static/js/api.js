@@ -38,10 +38,3 @@ export const fetchStatus = (opts) => getJson('/api/roads/status', rangeParams(op
 
 
 export const fetchBuses = () => getJson('/api/buses');
-
-/** 国土地理院 住所検索 API */
-export async function geocode(q) {
-  const res = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`);
-  if (!res.ok) throw new ApiError('地名検索に失敗しました');
-  return res.json();
-}

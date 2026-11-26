@@ -1,8 +1,6 @@
-// ダイアログ（過去検索・画像拡大・ヘルプ）と地名検索
+// ダイアログ（過去検索・画像拡大・ヘルプ）
 import { state } from './state.js';
 import * as time from './time.js';
-import { geocode } from './api.js';
-import { map } from './roadmap.js';
 import { surfaceLabel } from './categories.js';
 
 const MAX_DAYS = window.APP_CONFIG.maxSearchDays;
@@ -98,47 +96,4 @@ export function initHelpDialog() {
   dlg.querySelectorAll('.th-warn').forEach((n) => { n.textContent = T.warn.toFixed(1); });
   dlg.querySelectorAll('.th-danger').forEach((n) => { n.textContent = T.danger.toFixed(1); });
   el('btnHelp').addEventListener('click', () => dlg.showModal());
-}
-
-// ---- 地名検索（国土地理院 住所検索API） -------------------------------------
-export function initPlaceSearch() {
-  const form = el('placeSearch');
-  const list = el('placeResults');
-  L.DomEvent.disableClickPropagation(form);
-  L.DomEvent.disableScrollPropagation(form);
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const q = el('placeQuery').value.trim();
-    if (!q) return;
-    list.hidden = false;
-    list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: '検索中…' }));
-    try {
-      const results = (await geocode(q))
-        .filter((r) => {
-          const [lng, lat] = r.geometry.coordinates;
-          return lat > 41 && lat < 46 && lng > 139 && lng < 146.5;  // 北海道周辺
-        })
-        .slice(0, 8);
-      if (!results.length) {
-        list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: '見つかりませんでした' }));
-        return;
-      }
-      list.replaceChildren(...results.map((r) => {
-        const li = document.createElement('li');
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = r.properties.title;
-        b.addEventListener('click', () => {
-          const [lng, lat] = r.geometry.coordinates;
-          map.setView([lat, lng], 14);
-          list.hidden = true;
-        });
-        li.append(b);
-        return li;
-      }));
-    } catch {
-      list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: '地名検索を利用できません' }));
-    }
-  });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') list.hidden = true; });
 }
