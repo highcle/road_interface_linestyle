@@ -181,16 +181,6 @@ h1, h2, h3 { margin: 0; }
 .legend-total, .legend-note { font-size: 11px; color: var(--ink-3); margin: 6px 0 0; }
 .sw { display: inline-block; width: 26px; height: 7px; border-radius: 4px; background: var(--c); flex: none; }
 .sw-thin { height: 3px; opacity: .6; }
-/* WIPS の濃淡のカラーバー */
-.colorbar { margin: 8px 4px 2px; }
-.cb-title { font-size: 11px; color: var(--ink-3); margin: 0 0 4px; }
-.cb-bar { height: 9px; border-radius: 3px; }
-.cb-ticks { position: relative; height: 16px; font-size: 11px; color: var(--ink-2, #444); font-variant-numeric: tabular-nums; }
-.cb-tick { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
-.cb-tick::before { content: ""; position: absolute; left: 50%; top: -6px; height: 5px; border-left: 1px solid #555; }
-.cb-tick.cb-first { transform: none; }
-.cb-tick.cb-last { transform: translateX(-100%); }
-.cb-first::before, .cb-last::before { display: none; }
 
 /* 注意区間一覧 */
 .alert-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
@@ -198,7 +188,7 @@ h1, h2, h3 { margin: 0; }
 .alert-item { width: 100%; display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; border: 0; background: none; text-align: left; padding: 6px 4px; border-radius: 6px; cursor: pointer; }
 .alert-item:hover { background: #f3f5f9; }
 .alert-main { display: flex; flex-direction: column; min-width: 0; }
-.alert-value { font-size: 13px; font-weight: 700; }
+.alert-place { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .alert-sub { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .alert-time { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; font-variant-numeric: tabular-nums; }
 .alert-time small { color: var(--ink-3); font-size: 11px; }
@@ -214,19 +204,9 @@ h1, h2, h3 { margin: 0; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; margin: 0 0 10px; }
 .facts dt { color: var(--ink-3); white-space: nowrap; }
 .facts dd { margin: 0; }
-.timeline { margin-bottom: 8px; }
-.spark { width: 100%; height: auto; display: block; }
-.spark .band-danger { fill: var(--c-danger); opacity: .08; }
-.spark .band-warn { fill: var(--c-warn); opacity: .1; }
-.spark .th-line { stroke: var(--ink-3); stroke-dasharray: 2 3; stroke-width: 1; }
-.spark .axis { font-size: 9px; fill: var(--ink-3); }
-.spark .dot { stroke: #fff; stroke-width: .8; }
-.spark .rep-mark { fill: none; stroke: #1c2430; stroke-width: 2; }
-.spark .spark-empty { font-size: 11px; fill: var(--ink-3); }
 .thumb { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .thumb img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }
 .no-image { font-size: 12px; color: var(--ink-3); background: #f3f5f9; border-radius: 8px; padding: 14px; text-align: center; margin: 0; }
-.seg-id { font-size: 11px; margin: 6px 0 0; text-align: right; }
 
 /* ---- ダイアログ ---- */
 dialog { border: 0; border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.3); padding: 20px 22px; max-width: min(92vw, 440px); }
@@ -276,9 +256,6 @@ dialog p, dialog li { font-size: 13px; line-height: 1.7; }
 }
 
 /* ---- 表示オプション ---- */
-.opt-list { display: grid; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
-.opt-note { margin: 0 0 0 22px; font-size: 11px; color: var(--ink-3); }
-.opt-note:empty { display: none; }
 
 /* ---- バスの現在位置 ---- */
 .bus-icon { background: none; border: none; }

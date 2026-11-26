@@ -36,7 +36,6 @@ export const fetchGeometry = () =>
 
 export const fetchStatus = (opts) => getJson('/api/roads/status', rangeParams(opts));
 
-export const fetchTimeline = (segId, opts) => getJson(`/api/roads/${segId}/timeline`, rangeParams(opts));
 
 export const fetchBuses = () => getJson('/api/buses');
 

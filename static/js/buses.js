@@ -26,18 +26,17 @@ export function initBuses({ onImageClick }) {
 
 export async function refreshBuses() {
   const s = ++seq;
-  if (!state.showBuses || state.mode !== 'live') {
+  if (state.mode !== 'live') {  // 過去データの表示中は出さない
     layer.clearLayers();
-    el('busInfo').textContent = state.showBuses && state.mode !== 'live' ? '過去データの表示中は表示しません' : '';
     return;
   }
   try {
     const data = await api.fetchBuses();
-    if (s !== seq || !state.showBuses || state.mode !== 'live') return;
+    if (s !== seq || state.mode !== 'live') return;
     render(data);
   } catch (err) {
     if (s !== seq) return;
-    el('busInfo').textContent = `バスの位置を取得できませんでした（${err.message}）`;
+    console.warn('バスの位置を取得できませんでした', err);
   }
 }
 
@@ -78,8 +77,4 @@ function render(data) {
     if (b.image_url) m.on('click', () => onImage(b));
     layer.addLayer(m);
   }
-  const n = data.buses.length;
-  el('busInfo').textContent = n
-    ? `${n} 台（${time.short(time.parse(data.now), { withDate: false })} 時点）`
-    : `${time.short(time.parse(data.now), { withDate: false })} 時点で5分以内の観測はありません`;
 }

@@ -99,11 +99,6 @@
         </div>
         <div id="legendArea" class="legend"></div>
         <p class="legend-note">線が薄いほど古い観測です。チェックを外すと非表示になります。</p>
-        <div class="opt-list">
-          <label class="switch"><input type="checkbox" id="optGradient"> 視界（WIPS）の値に応じて色の濃さを変える</label>
-          <label class="switch"><input type="checkbox" id="optBuses"> バスの現在位置（5分以内の観測）</label>
-          <p id="busInfo" class="opt-note" aria-live="polite"></p>
-        </div>
       </section>
 
       <section class="card">
@@ -165,10 +160,9 @@
       <li><span class="sw" style="--c:var(--c-warn)"></span><b><span class="th-danger"></span> 超〜<span class="th-warn"></span> 未満</b>：注意</li>
       <li><span class="sw" style="--c:var(--c-danger)"></span><b><span class="th-danger"></span> 以下</b>：視程不良（危険）</li>
     </ul>
-    <p>「値に応じて色の濃さを変える」をオンにすると、各区間をその区間で実測した WIPS の値の色で塗ります（同じ「良好」でも 8.1 は明るい青、9.5 は濃い紺）。隣の区間と色を混ぜたり、観測のない値を補ったりはしません。色の濃さと値の対応は凡例のカラーバーで確認できます。</p>
 
     <h3>注意が必要な箇所の一覧</h3>
-    <p>注意区間は「路線 × 市町村」ごとに1件にまとめ、その中で最も悪い区間の値と、該当する区間の数・長さの合計を示します。選ぶと、該当する区間すべてが見えるように地図が動き、最も悪い区間の詳細を表示します。</p>
+    <p>注意区間は「路線 × 市町村」ごとに1件にまとめ、どこで起きているか（路線・市町村）と、その中で最も悪い区間の状態、該当する区間の数・長さの合計を示します。選ぶと、該当する区間すべてが見えるように地図が動き、最も悪い区間の詳細を表示します。</p>
 
     <h3>路面状態</h3>
     <p>同じ画像の路面部分から、乾燥・半湿潤・湿潤・シャーベット・積雪・凍結の6区分を判別しています。凡例は滑りやすさの目安順に並べています。</p>

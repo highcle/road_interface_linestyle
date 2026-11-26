@@ -1,6 +1,6 @@
 // 地図と道路レイヤー
 import { state } from './state.js';
-import { INDICATORS, COLORS, freshnessOpacity, wipsColor } from './categories.js';
+import { INDICATORS, COLORS, freshnessOpacity } from './categories.js';
 
 export let map = null;
 let roadLayer = null;
@@ -119,11 +119,9 @@ function styleFor(feature) {
   const key = ind.classify(rep);
   if (state.filters[key] === false) return { opacity: 0, weight: 0, interactive: false };
   const cls = ind.classes.find((c) => c.key === key);
-  // WIPS の濃淡表示: その区間の実測値の色（隣の区間とは混ぜない）
-  const color = state.gradient && state.indicator === 'wips' && rep.wips != null ? wipsColor(rep.wips) : cls.color;
   const severe = ind.isAlert(key) ? 1.5 : 0;
   return {
-    color,
+    color: cls.color,
     weight: w + severe,
     opacity: freshnessOpacity(rep.age_minutes),
     lineCap: 'round',

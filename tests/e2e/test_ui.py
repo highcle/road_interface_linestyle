@@ -85,14 +85,19 @@ def test_select_from_alert_list_shows_coherent_detail(page):
     page.wait_for_function("document.querySelector('#status').textContent.startsWith('3 区間')")
     items = page.locator("#alertList .alert-item")
     assert items.count() == 1                     # seg1: WIPS 7.0（視程不良）
+    # 一覧で強調するのは「どこで」（路線・市町村）。状態は補足の行に出す
+    assert items.first.locator(".alert-place").inner_text() == "都道府県道"   # 路線名なし・幅員は出さない
+    assert "視程不良（WIPS 7.00）" in items.first.locator(".alert-sub").first.inner_text()
     items.first.click()
     page.wait_for_selector("#detailPanel:not([hidden])")
     kpis = page.inner_text("#detailBody .kpis")
     assert "7.00" in kpis and "シャーベット" in kpis
-    facts = page.inner_text("#detailBody .facts")
-    assert "観測車両" not in facts                 # 車両番号は管理用の呼び名なので表示しない
-    assert "この24時間" in facts and "WIPS 最低 7.00" in facts
-    page.wait_for_selector("#timelineChart svg .rep-mark")
+    body = page.inner_text("#detailBody")
+    # 詳細は状態・観測時刻・画像だけ（車両番号・代表点の説明・期間の集計・推移グラフ・区間ID・幅員は出さない）
+    for gone in ("観測車両", "代表点", "回通過", "区間ID", "幅員"):
+        assert gone not in body
+    assert "幅員" not in page.inner_text("#detailPanel")
+    assert page.locator("#detailBody svg").count() == 0
     assert "seg=1" in page.evaluate("location.hash")
 
 
@@ -196,20 +201,15 @@ def test_failed_history_search_reverts_to_live(page):
     page.wait_for_function("document.querySelector('#status').textContent.startsWith('2 区間')")
 
 
-def test_bus_marker_and_toggles(page):
+def test_bus_marker(page):
     # 12:00 の5分以内: G（F は G から約20m のためまとめられる）
     page.wait_for_selector(".bus-marker")
     assert page.locator(".bus-marker").count() == 1
-    assert page.text_content("#busInfo").startswith("1 台")
     page.hover(".bus-marker")
     tip = page.text_content(".bus-tooltip")
     # 車両番号は表示しない。まとめた台数だけ示す
     assert "G" not in tip and "F" not in tip and "車両" not in tip
     assert "近くにいる他の 1 台" in tip
-    page.uncheck("#optBuses")
-    assert page.locator(".bus-marker").count() == 0
-    page.check("#optBuses")
-    page.wait_for_selector(".bus-marker")
     # 過去データの表示中はバスを出さない
     page.click("#btnModeHistory")
     page.click("#historyDialog [data-preset='yesterday']")
@@ -242,27 +242,13 @@ def test_map_click_selects_one_after_another(page):
         assert page.is_visible("#detailPanel")
 
 
-def test_wips_shading_uses_measured_value_only(page):
-    """濃淡表示: 線の色はその区間の実測値の色。区分の範囲外の色（緑など）は作らない"""
-    color = _js(page, "return [m.getLayer(0).options.color, c.wipsColor(9.0), c.wipsColor(8.2)];")
-    assert color[0] == color[1] != color[2]           # seg0 は WIPS 9.0
-    assert page.locator(".colorbar").count() == 1
-    # 4.0〜10.0 のどの値でも、緑が最も強い色にならない（赤〜橙〜黄、青〜紺のみ）
-    greenish = _js(page, """const out = [];
-        for (let v = 0; v <= 11; v += 0.01) {
-          const n = parseInt(c.wipsColor(v).slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-          if (g > r && g > b) out.push(v);
-        }
-        return out;""")
-    assert greenish == []
-    # 区分の境界をまたぐと色が切り替わる（7.5 は視程不良の色、7.51 は注意の色）
-    assert _js(page, "return c.wipsColor(7.5) !== c.wipsColor(7.51) && c.wipsColor(7.99) !== c.wipsColor(8.0);")
-    # オフにすると区分の色に戻り、カラーバーも消える
-    page.uncheck("#optGradient")
-    assert _js(page, "return m.getLayer(0).options.color;") == "#1f6fb2"
-    assert page.locator(".colorbar").count() == 0
-    page.check("#optGradient")
-    page.evaluate("localStorage.clear()")
+def test_lines_use_class_colors(page):
+    """線の色は区分の色だけ（凡例にない色は使わない）。表示切り替えのチェックボックスは置かない"""
+    assert _js(page, "return m.getLayer(0).options.color;") == "#1f6fb2"     # seg0: WIPS 9.0 → 良好
+    legend = _js(page, "return c.INDICATORS.wips.classes.map((k) => k.color);")
+    for seg in (0, 1):
+        assert _js(page, f"return m.getLayer({seg}).options.color;") in legend
+    assert page.locator("#optGradient, #optBuses").count() == 0
 
 
 def test_group_alerts(page):

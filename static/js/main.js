@@ -117,12 +117,7 @@ async function load({ depth = 0 } = {}) {
 
 // ---- 選択 --------------------------------------------------------------------
 function showDetail(id) {
-  const rep = state.status?.segments?.[id] ?? null;
-  const timelinePromise = rep
-    ? api.fetchTimeline(id, { history: state.mode === 'history' ? state.history : null, range: state.range })
-        .then((d) => d.observations)
-    : Promise.resolve([]);
-  renderDetail(id, rep, { onImage: openImage, timelinePromise });
+  renderDetail(id, state.status?.segments?.[id] ?? null, { onImage: openImage });
 }
 
 /** 注意箇所の一覧から選んだ: 最も悪い区間を選択し、まとめた区間全体が見えるように動かす */
@@ -227,13 +222,6 @@ async function boot() {
   openImage = initImageDialog();
   const historyDialog = initHistoryDialog(goHistory);
   initBuses({ onImageClick: (b) => openImage(b) });
-
-  const optGradient = el('optGradient');
-  optGradient.checked = state.gradient;
-  optGradient.addEventListener('change', () => { state.gradient = optGradient.checked; savePrefs(); renderAll(); });
-  const optBuses = el('optBuses');
-  optBuses.checked = state.showBuses;
-  optBuses.addEventListener('change', () => { state.showBuses = optBuses.checked; savePrefs(); refreshBuses(); });
 
   el('btnModeLive').addEventListener('click', () => { if (state.mode !== 'live') goLive(); });
   el('btnModeHistory').addEventListener('click', () => historyDialog.open());

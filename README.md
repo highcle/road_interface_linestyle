@@ -5,9 +5,8 @@
 - 直近24時間の状況を表示し、5分ごとに自動更新
 - 時間スライダー・プリセットで表示範囲を指定（範囲内の観測で代表点を選び直す）
 - 過去の任意の期間（最大7日）を検索
-- 区間をクリックすると、WIPS・路面状態・観測時刻・路面画像・推移グラフを表示
+- 区間をクリックすると、WIPS・路面状態・観測時刻・路面画像を表示
 - バスの現在位置（観測時刻が5分以内の最新観測）をアイコンで表示
-- 視界（WIPS）の線を、その区間の実測値に応じた濃淡で表示（切り替え可。隣の区間と色を混ぜたり値を補ったりはしない）
 - 注意が必要な区間の一覧（路線 × 市町村ごとにまとめて表示）、地名検索・現在地、表示状態の URL 共有、スマートフォン対応
 
 > 本リポジトリの `database.db` はテストデータです。本番環境では観測データがリアルタイムに送信され、DB に随時登録されます。
@@ -103,7 +102,7 @@ SQLite: database.db (pointed_road_data) ※他システムと共有。アプリ�
 │   │   ├── roadmap.js      # 地図・道路レイヤー・選択の強調
 │   │   ├── buses.js        # バスの現在位置
 │   │   ├── timebar.js      # 時間スライダー
-│   │   ├── panel.js        # 凡例/フィルタ・注意区間一覧・詳細・推移グラフ
+│   │   ├── panel.js        # 凡例/フィルタ・注意区間一覧・詳細
 │   │   ├── alerts.js       # 注意区間を路線 × 市町村ごとにまとめる
 │   │   ├── dialogs.js      # 過去検索・画像拡大・ヘルプ・地名検索
 │   │   ├── categories.js   # 区分と配色
@@ -271,7 +270,7 @@ sudo systemctl restart apache2  # 再起動
 |---|---|---|
 | `GET /api/roads/geometry` | — | 全区間の形状（GeoJSON）。`properties.id` が区間ID |
 | `GET /api/roads/status` | `base_start`, `base_end`（過去検索の期間。省略時は直近24h）<br>`start`, `end`（その中で代表点を選ぶ範囲。省略時は全体） | 区間ID → 代表点（`wips`, `road_surface`, `observed_at`, `age_minutes`, `image_url`, `bus`, `pass`, `stats`）と、期間・鮮度などのメタ情報 |
-| `GET /api/roads/<id>/timeline` | `status` と同じ | 区間の観測一覧（時刻・WIPS・路面・車両・通過番号） |
+| `GET /api/roads/<id>/timeline` | `status` と同じ | 区間の観測一覧（時刻・WIPS・路面・車両・通過番号）。現在の画面では使っていない（調査用） |
 | `GET /api/buses` | — | バスの現在位置。観測時刻が5分以内の観測から車両ごとに最新の1点を選び、100m 以内の点は最新の1点にまとめる。`bus`, `lat`, `lon`, `observed_at`, `age_seconds`, `heading`（進行方向、真北=0°）, `wips`, `road_surface`, `image_url`, `merged`（まとめられた車両）。車両記号は管理用のため画面には表示しない |
 | `GET /healthz` | — | `ok`（200）/ `stale`・`no_cache`（503） |
 | `GET /api/roads/recent` | — | **旧API**。直近24時間・全区間の GeoJSON。`properties` は N13 の元属性・`display_route_name`・`wips`（期間内平均）・`road_surface`・`last_updated`・`image_path` |
