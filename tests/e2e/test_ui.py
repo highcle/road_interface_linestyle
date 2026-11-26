@@ -89,7 +89,9 @@ def test_select_from_alert_list_shows_coherent_detail(page):
     page.wait_for_selector("#detailPanel:not([hidden])")
     kpis = page.inner_text("#detailBody .kpis")
     assert "7.00" in kpis and "シャーベット" in kpis
-    assert "観測車両\nC" in page.inner_text("#detailBody .facts").replace("\t", "\n")
+    facts = page.inner_text("#detailBody .facts")
+    assert "観測車両" not in facts                 # 車両番号は管理用の呼び名なので表示しない
+    assert "この24時間" in facts and "WIPS 最低 7.00" in facts
     page.wait_for_selector("#timelineChart svg .rep-mark")
     assert "seg=1" in page.evaluate("location.hash")
 
@@ -99,9 +101,9 @@ def test_surface_indicator_and_filter(page):
     assert page.get_attribute("[data-indicator=surface]", "aria-pressed") == "true"
     legend = page.inner_text("#legendArea")
     assert "湿潤" in legend and "積雪（新雪）" in legend
-    assert page.text_content("#alertCount") == "2"     # seg1: slush, seg2: fresh
+    assert page.text_content("#alertCount") == "2 件"     # seg1: slush, seg2: fresh（路線が別）
     page.locator(".legend-item", has_text="積雪（新雪）").locator("input").uncheck()
-    assert page.text_content("#alertCount") == "1"
+    assert page.text_content("#alertCount") == "1 件"
     page.locator(".legend-item", has_text="シャーベット").locator("input").uncheck()
     assert "表示範囲内に該当する区間はありません" in page.text_content("#alertList")
     # 設定はリロード後も保持される
@@ -198,21 +200,89 @@ def test_bus_marker_and_toggles(page):
     # 12:00 の5分以内: G（F は G から約20m のためまとめられる）
     page.wait_for_selector(".bus-marker")
     assert page.locator(".bus-marker").count() == 1
-    assert page.text_content(".bus-marker .bus-id") == "G"
     assert page.text_content("#busInfo").startswith("1 台")
     page.hover(".bus-marker")
     tip = page.text_content(".bus-tooltip")
-    assert "車両 G" in tip and "近くの車両: F" in tip
+    # 車両番号は表示しない。まとめた台数だけ示す
+    assert "G" not in tip and "F" not in tip and "車両" not in tip
+    assert "近くにいる他の 1 台" in tip
     page.uncheck("#optBuses")
     assert page.locator(".bus-marker").count() == 0
     page.check("#optBuses")
     page.wait_for_selector(".bus-marker")
-    # グラデーションの切り替えでエラーにならない
-    page.uncheck("#optGradient")
-    page.check("#optGradient")
     # 過去データの表示中はバスを出さない
     page.click("#btnModeHistory")
     page.click("#historyDialog [data-preset='yesterday']")
     page.click("#btnHistorySearch")
     page.wait_for_function("document.querySelector('#historyBanner').hidden === false")
     page.wait_for_function("document.querySelectorAll('.bus-marker').length === 0")
+
+
+def _js(page, body):
+    return page.evaluate(f"""async () => {{
+        const m = await import('{PREFIX}/static/js/roadmap.js');
+        const c = await import('{PREFIX}/static/js/categories.js');
+        const a = await import('{PREFIX}/static/js/alerts.js');
+        const st = (await import('{PREFIX}/static/js/state.js')).state;
+        {body}
+    }}""")
+
+
+def test_map_click_selects_one_after_another(page):
+    """地図上の線を続けてクリックしても、毎回その区間が選ばれる（強調表示がクリックを奪わない）"""
+    page.click("#timeBar [data-hours='all']")
+    page.wait_for_function("document.querySelector('#status').textContent.startsWith('3 区間')")
+    _js(page, "m.map.fitBounds(L.latLngBounds([[42.999, 141.299], [43.011, 141.331]]), { paddingTopLeft: [80, 200], paddingBottomRight: [480, 80] }); "
+              "await new Promise((r) => setTimeout(r, 600));")
+    for seg in (0, 2, 1, 0):
+        x, y = _js(page, f"""const p = m.map.latLngToContainerPoint(m.centerOf({seg}));
+            const r = m.map.getContainer().getBoundingClientRect(); return [p.x + r.left, p.y + r.top];""")
+        page.mouse.click(x, y)
+        page.wait_for_function(f"location.hash.includes('seg={seg}')")
+        assert page.is_visible("#detailPanel")
+
+
+def test_wips_shading_uses_measured_value_only(page):
+    """濃淡表示: 線の色はその区間の実測値の色。区分の範囲外の色（緑など）は作らない"""
+    color = _js(page, "return [m.getLayer(0).options.color, c.wipsColor(9.0), c.wipsColor(8.2)];")
+    assert color[0] == color[1] != color[2]           # seg0 は WIPS 9.0
+    assert page.locator(".colorbar").count() == 1
+    # 4.0〜10.0 のどの値でも、緑が最も強い色にならない（赤〜橙〜黄、青〜紺のみ）
+    greenish = _js(page, """const out = [];
+        for (let v = 0; v <= 11; v += 0.01) {
+          const n = parseInt(c.wipsColor(v).slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+          if (g > r && g > b) out.push(v);
+        }
+        return out;""")
+    assert greenish == []
+    # 区分の境界をまたぐと色が切り替わる（7.5 は視程不良の色、7.51 は注意の色）
+    assert _js(page, "return c.wipsColor(7.5) !== c.wipsColor(7.51) && c.wipsColor(7.99) !== c.wipsColor(8.0);")
+    # オフにすると区分の色に戻り、カラーバーも消える
+    page.uncheck("#optGradient")
+    assert _js(page, "return m.getLayer(0).options.color;") == "#1f6fb2"
+    assert page.locator(".colorbar").count() == 0
+    page.check("#optGradient")
+    page.evaluate("localStorage.clear()")
+
+
+def test_group_alerts(page):
+    """注意区間は「路線 × 市町村」で1件にまとめ、最も悪い区間の値を示す"""
+    groups = _js(page, """
+        const cls = c.INDICATORS.wips.classes;
+        const danger = cls.find((k) => k.key === 'wips_danger'), warn = cls.find((k) => k.key === 'wips_warn');
+        const it = (id, wips, k, t) => ({ id, cls: k, rep: { wips, observed_at: t, age_minutes: 5 } });
+        // 1・2・3 は国道5号・札幌市（3 は重複区間「国道5号・230号」）/ 4 は道道1号 / 5 は国道5号の小樽市
+        const items = [it(1, 7.8, warn, '2026-01-10 11:00:00'), it(2, 7.1, danger, '2026-01-10 11:01:00'),
+                       it(3, 7.7, warn, '2026-01-10 11:02:00'), it(4, 6.0, danger, '2026-01-10 10:00:00'),
+                       it(5, 7.9, warn, '2026-01-10 09:00:00')];
+        const route = { 1: '国道5号', 2: '国道5号', 3: '国道5号・230号', 4: '道道1号 テスト線', 5: '国道5号' };
+        const muni = { 1: '札幌市', 2: '札幌市', 3: '札幌市', 4: '札幌市', 5: '小樽市' };
+        const gs = a.groupAlerts(items, { routeOf: (i) => route[i], muniOf: (i) => muni[i], lengthOf: () => 100 });
+        return gs.map((g) => ({ key: `${g.route} ${g.muni}`, ids: [...g.ids].sort(), worst: g.worst.id,
+                                len: g.length, latest: g.latest }));
+    """)
+    assert groups == [
+        {"key": "道道1号 テスト線 札幌市", "ids": [4], "worst": 4, "len": 100, "latest": "2026-01-10 10:00:00"},
+        {"key": "国道5号 札幌市", "ids": [1, 2, 3], "worst": 2, "len": 300, "latest": "2026-01-10 11:02:00"},
+        {"key": "国道5号 小樽市", "ids": [5], "worst": 5, "len": 100, "latest": "2026-01-10 09:00:00"},
+    ]

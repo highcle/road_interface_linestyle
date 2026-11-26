@@ -63,7 +63,7 @@ h1, h2, h3 { margin: 0; }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip[aria-pressed="true"] { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 
-.badge { background: var(--c-danger); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 8px; }
+.badge { background: var(--c-danger); color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 8px; white-space: nowrap; flex: none; }
 .badge:empty { display: none; }
 
 /* ---- ヘッダー ---- */
@@ -181,6 +181,16 @@ h1, h2, h3 { margin: 0; }
 .legend-total, .legend-note { font-size: 11px; color: var(--ink-3); margin: 6px 0 0; }
 .sw { display: inline-block; width: 26px; height: 7px; border-radius: 4px; background: var(--c); flex: none; }
 .sw-thin { height: 3px; opacity: .6; }
+/* WIPS の濃淡のカラーバー */
+.colorbar { margin: 8px 4px 2px; }
+.cb-title { font-size: 11px; color: var(--ink-3); margin: 0 0 4px; }
+.cb-bar { height: 9px; border-radius: 3px; }
+.cb-ticks { position: relative; height: 16px; font-size: 11px; color: var(--ink-2, #444); font-variant-numeric: tabular-nums; }
+.cb-tick { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+.cb-tick::before { content: ""; position: absolute; left: 50%; top: -6px; height: 5px; border-left: 1px solid #555; }
+.cb-tick.cb-first { transform: none; }
+.cb-tick.cb-last { transform: translateX(-100%); }
+.cb-first::before, .cb-last::before { display: none; }
 
 /* 注意区間一覧 */
 .alert-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
@@ -279,11 +289,8 @@ dialog p, dialog li { font-size: 13px; line-height: 1.7; }
   border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
 }
 .bus-body svg { width: 15px; height: 15px; }
-.bus-id {
-  position: absolute; right: -6px; bottom: -4px; min-width: 15px; height: 15px; padding: 0 3px;
-  border-radius: 8px; background: #fff; color: #1d2733; border: 1px solid #1d2733;
-  font: 700 10px/13px system-ui, sans-serif; text-align: center;
-}
+/* 縮小表示では小さく（周りの道路の線を覆わない） */
+.buses-small .bus-marker { transform: scale(.6); }
 /* 進行方向: アイコンの外周に付く三角（北=0° から時計回りに回転） */
 .bus-heading { position: absolute; inset: 0; pointer-events: none; }
 .bus-heading::before {

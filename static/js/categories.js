@@ -10,7 +10,7 @@ export const COLORS = {
 export const INDICATORS = {
   wips: {
     label: '視界（WIPS）',
-    alertLabel: '視程不良・注意の区間',
+    alertLabel: '視程不良・注意の区間（路線・市町村別）',
     classes: [
       { key: 'wips_good', label: `${T.warn.toFixed(1)} 以上：良好`, color: '#1f6fb2', level: 0 },
       { key: 'wips_warn', label: `${T.danger.toFixed(1)} 超〜${T.warn.toFixed(1)} 未満：注意`, color: '#e3a100', level: 1 },
@@ -27,7 +27,7 @@ export const INDICATORS = {
   },
   surface: {
     label: '路面状態',
-    alertLabel: '凍結・積雪・シャーベットの区間',
+    alertLabel: '凍結・積雪・シャーベットの区間（路線・市町村別）',
     // 滑りやすさの目安順
     classes: [
       { key: 'dry', label: '乾燥', color: '#1f6fb2', level: 0 },
@@ -65,59 +65,39 @@ export function freshnessOpacity(ageMinutes) {
   return 0.45;
 }
 
-// ---- 連続色（グラデーション用） ------------------------------------------------
-// 区分の色を危険度レベル順に並べ、レベルの小数値を OKLCh 色空間で補間する。
-// RGB で補間すると青→黄の途中が灰色にくすむため、色相を回して（青→青緑→緑→黄→赤）つなぐ。
+// ---- WIPS の値による濃淡 -------------------------------------------------------
+// 区間の色を、その区間で実測した WIPS の値そのものから決める（隣の区間と混ぜない）。
+// 区分ごとに同系色の範囲だけを使い、区分の境界（7.5・8.0）では色を切り替える。
+// 色はすべて凡例のカラーバー上にあり、カラーバー上の位置＝実測値になる。
+export const WIPS_SCALE = [
+  // 視程不良: 暗い赤（低い）→ 赤（境界）
+  { key: 'wips_danger', min: 4.0, max: T.danger, from: '#5c0011', to: '#d42a1c', width: 40 },
+  // 注意: 橙 → 黄
+  { key: 'wips_warn', min: T.danger, max: T.warn, from: '#ec7014', to: '#f2b600', width: 20 },
+  // 良好: 明るい青（境界）→ 濃い紺（高い）
+  { key: 'wips_good', min: T.warn, max: 10.0, from: '#7fb6dd', to: '#0b2f6b', width: 40 },
+];
+
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
-const toLin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-const fromLin = (c) => {
-  const v = c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
-  return Math.round(Math.min(1, Math.max(0, v)) * 255);
-};
-function rgbToOklch([r, g, b]) {
-  [r, g, b] = [toLin(r), toLin(g), toLin(b)];
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
-  const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-  const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
-  return [L, Math.hypot(A, B), Math.atan2(B, A)];
-}
-function oklchToHex([L, C, h]) {
-  const A = C * Math.cos(h), B = C * Math.sin(h);
-  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
-  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
-  const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
-  const rgb = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
-  ].map(fromLin);
-  return `#${rgb.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-}
-const rampCache = {};
-function ramp(indicator) {
-  if (!rampCache[indicator]) {
-    rampCache[indicator] = INDICATORS[indicator].classes
-      .filter((c) => c.level >= 0).sort((a, b) => a.level - b.level)
-      .map((c) => rgbToOklch(hexToRgb(c.color)));
-  }
-  return rampCache[indicator];
+function mix(a, b, t) {
+  const [x, y] = [hexToRgb(a), hexToRgb(b)];
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** 危険度レベル（小数可）の色。整数レベルでは区分の色そのもの */
-export function levelColor(indicator, level) {
-  const r = ramp(indicator);
-  const x = Math.min(r.length - 1, Math.max(0, level));
-  const i = Math.min(r.length - 2, Math.floor(x));
-  const t = x - i;
-  const [L0, C0, h0] = r[i], [L1, C1, h1] = r[i + 1];
-  let dh = h1 - h0;
-  if (dh > Math.PI) dh -= 2 * Math.PI;
-  if (dh < -Math.PI) dh += 2 * Math.PI;   // 色相は近い向きに回す
-  return oklchToHex([L0 + (L1 - L0) * t, C0 + (C1 - C0) * t, h0 + dh * t]);
+/** WIPS の実測値の色。値が範囲外なら端の色。区分は INDICATORS.wips.classify と同じ基準 */
+export function wipsColor(wips) {
+  const key = INDICATORS.wips.classify({ wips });
+  const band = WIPS_SCALE.find((b) => b.key === key);
+  if (!band) return COLORS.none;
+  const t = Math.min(1, Math.max(0, (wips - band.min) / (band.max - band.min)));
+  return mix(band.from, band.to, t);
+}
+
+/** 区分の濃淡を表す CSS グラデーション（凡例の見本用） */
+export function bandCss(key) {
+  const b = WIPS_SCALE.find((x) => x.key === key);
+  return b ? `linear-gradient(90deg, ${b.from}, ${b.to})` : null;
 }

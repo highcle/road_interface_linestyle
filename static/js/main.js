@@ -65,7 +65,7 @@ function renderHeader(data) {
 function renderAll() {
   restyle();
   renderLegend(onFilterChange);
-  renderAlertList((id) => selectSegment(id, { zoom: true }));
+  renderAlertList(pickAlert);
   if (state.selectedId != null) showDetail(state.selectedId);
   updateConnector();
 }
@@ -125,12 +125,19 @@ function showDetail(id) {
   renderDetail(id, rep, { onImage: openImage, timelinePromise });
 }
 
+/** 注意箇所の一覧から選んだ: 最も悪い区間を選択し、まとめた区間全体が見えるように動かす */
+function pickAlert(group) {
+  selectSegment(group.worst.id, { zoom: group.ids });
+  el('panelBody').scrollTo({ top: 0, behavior: 'smooth' });  // 詳細はパネルの先頭にある
+}
+
+/** zoom: true なら区間に寄る。区間IDの配列ならそれらが収まるように寄る */
 function selectSegment(id, { zoom = false } = {}) {
   state.selectedId = id;
   highlightSelected();
   showDetail(id);
   expandPanel();
-  if (zoom) zoomTo(id);
+  if (zoom) zoomTo(Array.isArray(zoom) ? zoom : id);
   else ensureVisible(id);
   updateConnector();
   writeHash(map);
@@ -148,7 +155,7 @@ function clearSelection() {
 function onFilterChange() {
   restyle();
   renderLegend(onFilterChange);
-  renderAlertList((id) => selectSegment(id, { zoom: true }));
+  renderAlertList(pickAlert);
 }
 
 // ---- モード ------------------------------------------------------------------
@@ -223,7 +230,7 @@ async function boot() {
 
   const optGradient = el('optGradient');
   optGradient.checked = state.gradient;
-  optGradient.addEventListener('change', () => { state.gradient = optGradient.checked; savePrefs(); restyle(); });
+  optGradient.addEventListener('change', () => { state.gradient = optGradient.checked; savePrefs(); renderAll(); });
   const optBuses = el('optBuses');
   optBuses.checked = state.showBuses;
   optBuses.addEventListener('change', () => { state.showBuses = optBuses.checked; savePrefs(); refreshBuses(); });

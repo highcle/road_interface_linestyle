@@ -15,6 +15,10 @@ let onImage = () => {};
 export function initBuses({ onImageClick }) {
   onImage = onImageClick;
   map.createPane('buses').style.zIndex = 620;  // 道路・強調表示より上、ツールチップより下
+  // 縮小表示では小さくして、周りの道路の線を覆わないようにする
+  const resize = () => map.getContainer().classList.toggle('buses-small', map.getZoom() <= 9);
+  map.on('zoomend', resize);
+  resize();
   layer = L.layerGroup().addTo(map);
   setInterval(() => { if (!document.hidden) refreshBuses(); }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshBuses(); });
@@ -49,20 +53,17 @@ function busIcon(b) {
   const body = document.createElement('span');
   body.className = 'bus-body';
   body.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h12a3 3 0 0 1 3 3v11a2 2 0 0 1-1 1.73V20a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-2H7v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-2.27A2 2 0 0 1 3 16V5a3 3 0 0 1 3-3Zm0 3v6h12V5H6Zm1.5 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/></svg>';
-  const label = document.createElement('span');
-  label.className = 'bus-id';
-  label.textContent = b.bus === 'unknown' ? '?' : b.bus;
-  root.append(body, label);
+  root.append(body);
   return L.divIcon({ html: root, className: 'bus-icon', iconSize: [30, 30], iconAnchor: [15, 15] });
 }
 
 function tooltipText(b) {
   const lines = [
-    `車両 ${b.bus === 'unknown' ? '不明' : b.bus}`,
     `${time.short(time.parse(b.observed_at))}（${b.age_seconds < 60 ? `${b.age_seconds}秒前` : time.ageLabel(Math.floor(b.age_seconds / 60))}）`,
     `WIPS ${b.wips != null ? b.wips.toFixed(2) : '欠損'} / 路面 ${surfaceLabel(b.road_surface)}`,
   ];
-  if (b.merged.length) lines.push(`近くの車両: ${b.merged.join('・')}`);
+  // 車両番号は管理用の呼び名なので表示しない
+  if (b.merged.length) lines.push(`近くにいる他の ${b.merged.length} 台もまとめて表示`);
   return lines.join('\n');
 }
 
@@ -71,7 +72,7 @@ function render(data) {
   for (const b of data.buses) {
     const m = L.marker([b.lat, b.lon], {
       icon: busIcon(b), pane: 'buses', keyboard: true,
-      title: `車両 ${b.bus}`, alt: `車両 ${b.bus} の現在位置`,
+      title: 'バスの現在位置', alt: 'バスの現在位置',
     });
     m.bindTooltip(tooltipText(b), { direction: 'top', offset: [0, -14], className: 'bus-tooltip' });
     if (b.image_url) m.on('click', () => onImage(b));

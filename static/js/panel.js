@@ -1,7 +1,8 @@
 // 右パネル: 凡例/フィルタ、注意区間一覧、選択区間の詳細
 import { state, savePrefs } from './state.js';
-import { INDICATORS, COLORS, classInfo, surfaceLabel } from './categories.js';
-import { categoryOf, getLayer } from './roadmap.js';
+import { INDICATORS, COLORS, WIPS_SCALE, classInfo, surfaceLabel, wipsColor, bandCss } from './categories.js';
+import { categoryOf, getLayer, lengthOf } from './roadmap.js';
+import { groupAlerts, lengthLabel } from './alerts.js';
 import * as time from './time.js';
 
 const T = window.APP_CONFIG.thresholds;
@@ -32,12 +33,14 @@ export function renderLegend(onFilterChange) {
     total += 1;
   }
   const rows = [...ind.classes].reverse().filter((c) => !c.dataless || counts[c.key]);
+  const shaded = state.gradient && state.indicator === 'wips';
   const make = (key, label, color, count, thin) => h('label', { class: 'legend-item' },
     h('input', {
       type: 'checkbox', checked: state.filters[key] !== false,
       onchange: (e) => { state.filters[key] = e.target.checked; savePrefs(); onFilterChange(); },
     }),
-    h('span', { class: `sw${thin ? ' sw-thin' : ''}`, style: `--c:${color}` }),
+    h('span', { class: `sw${thin ? ' sw-thin' : ''}`,
+      style: `--c:${(shaded && bandCss(key)) || color}` }),
     h('span', { class: 'legend-label' }, label),
     h('span', { class: 'legend-count' }, count != null ? `${count}` : ''),
   );
@@ -48,10 +51,38 @@ export function renderLegend(onFilterChange) {
   const order = state.indicator === 'surface'
     ? h('p', { class: 'legend-order' }, '↑ 滑りやすい　↓ 滑りにくい')
     : h('p', { class: 'legend-order' }, '↑ 視界が悪い　↓ 視界が良い');
-  el('legendArea').replaceChildren(order, list, h('p', { class: 'legend-total' }, `観測のある区間: ${total}`));
+  el('legendArea').replaceChildren(order, list, shaded ? colorBar() : null,
+    h('p', { class: 'legend-total' }, `観測のある区間: ${total}`));
 
   document.querySelectorAll('[data-indicator]').forEach((b) =>
     b.setAttribute('aria-pressed', String(b.dataset.indicator === state.indicator)));
+}
+
+/** WIPS の濃淡のカラーバー（左=視界が悪い、右=良い）。区分の境界で色が切り替わる */
+function colorBar() {
+  let pos = 0;
+  const stops = [];
+  const ticks = [];
+  for (const b of WIPS_SCALE) {
+    stops.push(`${b.from} ${pos}%`, `${b.to} ${pos + b.width}%`);
+    if (pos > 0) ticks.push(h('span', { class: 'cb-tick', style: `left:${pos}%` }, b.min.toFixed(1)));
+    pos += b.width;
+  }
+  const first = WIPS_SCALE[0], last = WIPS_SCALE[WIPS_SCALE.length - 1];
+  return h('div', { class: 'colorbar', role: 'img',
+    'aria-label': `WIPS の値と色: ${first.min.toFixed(1)} 以下から ${last.max.toFixed(1)} 以上まで` },
+    h('p', { class: 'cb-title' }, '線の色の濃さ＝その区間の WIPS 実測値'),
+    h('div', { class: 'cb-bar', style: `background: linear-gradient(90deg, ${stops.join(', ')})` }),
+    h('div', { class: 'cb-ticks' },
+      h('span', { class: 'cb-tick cb-first', style: 'left:0' }, `${first.min.toFixed(1)}以下`),
+      ticks,
+      h('span', { class: 'cb-tick cb-last', style: 'left:100%' }, `${last.max.toFixed(1)}以上`)),
+  );
+}
+
+/** 地図の線と同じ色（WIPS の濃淡表示中は実測値の色） */
+function lineColor(rep, cls) {
+  return state.gradient && state.indicator === 'wips' && rep.wips != null ? wipsColor(rep.wips) : cls.color;
 }
 
 // ---- 注意区間一覧 ---------------------------------------------------------
@@ -64,26 +95,42 @@ export function renderAlertList(onPick) {
     if (!ind.isAlert(key) || state.filters[key] === false) continue;
     items.push({ id: Number(id), rep, cls: classInfo(state.indicator, key) });
   }
-  // 危険度の高い順 → 新しい順
-  items.sort((a, b) => b.cls.level - a.cls.level || b.rep.observed_at.localeCompare(a.rep.observed_at));
-  el('alertCount').textContent = items.length ? `${items.length}` : '';
+  const props = (id) => getLayer(id)?.feature.properties || {};
+  const groups = groupAlerts(items, {
+    routeOf: (id) => props(id).label,
+    muniOf: (id) => props(id).muni,
+    lengthOf,
+  });
+  el('alertCount').textContent = groups.length ? `${groups.length} 件` : '';
   const list = el('alertList');
-  if (!items.length) {
+  if (!groups.length) {
     list.replaceChildren(h('li', { class: 'empty' }, '表示範囲内に該当する区間はありません'));
     return;
   }
   const MAX = 50;
-  list.replaceChildren(...items.slice(0, MAX).map(({ id, rep, cls }) => h('li', {},
-    h('button', { type: 'button', class: 'alert-item', onclick: () => onPick(id) },
-      h('span', { class: 'sw', style: `--c:${cls.color}` }),
-      h('span', { class: 'alert-main' },
-        h('span', { class: 'alert-value' },
-          state.indicator === 'wips' ? `WIPS ${rep.wips.toFixed(2)}` : cls.label),
-        h('span', { class: 'alert-sub' }, placeLabel(getLayer(id)?.feature.properties))),
-      h('span', { class: 'alert-time' }, time.short(time.parse(rep.observed_at)),
-        h('small', {}, time.ageLabel(rep.age_minutes))),
-    ))));
-  if (items.length > MAX) list.append(h('li', { class: 'empty' }, `ほか ${items.length - MAX} 区間`));
+  list.replaceChildren(...groups.slice(0, MAX).map((g) => {
+    const { rep, cls } = g.worst;
+    const multi = g.ids.length > 1;
+    const value = state.indicator === 'wips'
+      ? `${multi ? '最も悪い区間 ' : ''}WIPS ${rep.wips.toFixed(2)}`
+      : g.classes.map((c) => c.label).join('・');
+    const place = [g.route, g.muni].filter(Boolean).join(' ・ ');
+    const extent = multi ? `${g.ids.length}区間・計 ${lengthLabel(g.length)}` : lengthLabel(g.length);
+    return h('li', {},
+      h('button', { type: 'button', class: 'alert-item', onclick: () => onPick(g) },
+        h('span', { class: 'sw', style: `--c:${lineColor(rep, cls)}` }),
+        h('span', { class: 'alert-main' },
+          h('span', { class: 'alert-value' }, value),
+          h('span', { class: 'alert-sub' }, place),
+          h('span', { class: 'alert-sub' }, extent)),
+        h('span', { class: 'alert-time' }, time.short(time.parse(g.latest)),
+          h('small', {}, time.ageLabel(g.ageMinutes))),
+      ));
+  }));
+  if (groups.length > MAX) list.append(h('li', { class: 'empty' }, `ほか ${groups.length - MAX} 件`));
+  if (items.length > groups.length) {
+    list.append(h('li', { class: 'empty' }, `${items.length} 区間を路線・市町村ごとに ${groups.length} 件にまとめています`));
+  }
 }
 
 /** 一覧用の短い表記: 「国道5号 ・ 小樽市」 */
@@ -142,15 +189,15 @@ export function renderDetail(segId, rep, { onImage, timelinePromise }) {
       h('dd', {}, time.short(obsAt), ' ',
         h('span', { class: 'muted' }, isLive ? `（${time.ageLabel(rep.age_minutes)}）`
           : `（表示範囲の終わりの${time.ageLabel(rep.age_minutes)}）`)),
-      h('dt', {}, '観測車両'), h('dd', {}, rep.bus),
       h('dt', {}, '代表点'),
       h('dd', {}, `最新の通過（${time.rangeLabel(time.parse(rep.pass.start), time.parse(rep.pass.end))}、${rep.pass.n_obs}観測）`,
         state.status?.algorithm?.id === 'latest_pass_min_wips' ? 'のうち WIPS 最小の観測'
           : `の WIPS 中央値${rep.pass.wips_median != null ? `（${rep.pass.wips_median.toFixed(2)}）` : ''}に最も近い観測`),
-      h('dt', {}, '期間内'),
-      h('dd', {}, `${s.n_obs}観測・${s.n_passes}回通過`,
+      // 色の判定には使わない参考情報: 代表点より前に、もっと悪い値が出ていなかったか
+      h('dt', {}, `この${time.durationLabel(state.range.end - state.range.start)}`),
+      h('dd', {}, `${s.n_obs}回観測（${s.n_passes}回通過）`,
         s.wips_min != null ? h('span', { class: 'muted' },
-          ` / WIPS 最小 ${s.wips_min.toFixed(2)}・中央 ${s.wips_median.toFixed(2)}・最大 ${s.wips_max.toFixed(2)}`) : null),
+          `、WIPS 最低 ${s.wips_min.toFixed(2)}・最高 ${s.wips_max.toFixed(2)}`) : null),
     ),
     h('div', { class: 'timeline', id: 'timelineChart' }, h('p', { class: 'muted' }, '推移を読み込み中…')),
     img,
@@ -209,7 +256,7 @@ function sparkline(obs, rep) {
     const t = time.parse(o.t);
     const c = classInfo('surface', INDICATORS.surface.classify(o)).color;
     const dot = s('circle', { cx: x(t), cy: y(o.wips), r: 2.8, fill: c, class: 'dot' });
-    dot.append(s('title', {}, `${time.short(t)}  WIPS ${o.wips.toFixed(2)} / ${surfaceLabel(o.road_surface)} / ${o.bus} 通過${o.pass_no}`));
+    dot.append(s('title', {}, `${time.short(t)}  WIPS ${o.wips.toFixed(2)} / ${surfaceLabel(o.road_surface)} / ${o.pass_no}回目の通過`));
     svg.append(dot);
   }
   const rt = time.parse(rep.observed_at);

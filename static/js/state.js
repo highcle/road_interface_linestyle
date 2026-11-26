@@ -20,7 +20,7 @@ export const state = {
   status: null,            // /api/roads/status の結果
   selectedId: null,
   autoUpdate: true,
-  gradient: true,          // 線を隣の区間となめらかにつなぐ
+  gradient: true,          // WIPS の線を実測値に応じた濃淡で塗る
   showBuses: true,         // バスの現在位置を表示
 };
 

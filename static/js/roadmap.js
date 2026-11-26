@@ -1,6 +1,6 @@
 // 地図と道路レイヤー
 import { state } from './state.js';
-import { INDICATORS, COLORS, freshnessOpacity, levelColor } from './categories.js';
+import { INDICATORS, COLORS, freshnessOpacity, wipsColor } from './categories.js';
 
 export let map = null;
 let roadLayer = null;
@@ -10,85 +10,26 @@ let onSelect = () => {};
 
 const HOKKAIDO = L.latLngBounds([41.3, 139.3], [45.6, 145.9]);
 
-// ---- グラデーション表示 -------------------------------------------------------
-// 区間の両端（隣の区間と共有する点＝ノード）に、つながっている区間の値の平均を与え、
-// 「始点ノードの色 → 区間自身の色（中央） → 終点ノードの色」と塗る。
-// 区間の中央は必ず区間自身の区分の色になり、つなぎ目では隣り合う区間が同じ色になる。
-const ends = new Map();    // 区間ID → [始点ノード, 終点ノード]
-const nodes = new Map();   // ノード → [区間ID...]
-let gradients = new Map(); // 区間ID → [[位置, 色], ...]
+const lengths = new Map(); // 区間ID → 長さ (m)
 
-/** Canvas で線をグラデーションで描く（options.gradient があれば strokeStyle に使う） */
-const GradientCanvas = L.Canvas.extend({
-  _fillStroke(ctx, layer) {
-    const stops = layer.options.gradient;
-    const rings = layer._rings;
-    if (stops && rings && rings.length && rings[0].length) {
-      const a = rings[0][0];
-      const lastRing = rings[rings.length - 1];
-      const b = lastRing[lastRing.length - 1];
-      if (a.x !== b.x || a.y !== b.y) {
-        const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-        for (const [t, c] of stops) g.addColorStop(t, c);
-        const color = layer.options.color;
-        layer.options.color = g;
-        try { L.Canvas.prototype._fillStroke.call(this, ctx, layer); } finally { layer.options.color = color; }
-        return;
-      }
-    }
-    L.Canvas.prototype._fillStroke.call(this, ctx, layer);
-  },
-});
-
-/** 表示中（フィルタで隠れていない）の区間の区分レベル。色を持たない区間は null */
-function levelOf(id) {
-  const rep = repFor(id);
-  if (!rep) return null;
-  const ind = INDICATORS[state.indicator];
-  const key = ind.classify(rep);
-  if (state.filters[key] === false) return null;
-  const level = ind.classes.find((c) => c.key === key)?.level ?? -1;
-  return level >= 0 ? level : null;
-}
-
-function computeGradients() {
-  gradients = new Map();
-  if (!state.gradient || !state.status) return;
-  const levels = new Map();
-  for (const k of Object.keys(state.status.segments || {})) {
-    const lv = levelOf(Number(k));
-    if (lv != null) levels.set(Number(k), lv);
+/** 区間の長さ (m) */
+export function lengthOf(id) {
+  if (lengths.has(id)) return lengths.get(id);
+  const layer = layersById.get(id);
+  let d = 0;
+  if (layer) {
+    const pts = layer.getLatLngs().flat(Infinity);
+    for (let i = 1; i < pts.length; i += 1) d += pts[i - 1].distanceTo(pts[i]);
   }
-  const nodeLevel = new Map();
-  const levelAtNode = (node) => {
-    if (nodeLevel.has(node)) return nodeLevel.get(node);
-    let sum = 0, n = 0;
-    for (const id of nodes.get(node) || []) if (levels.has(id)) { sum += levels.get(id); n += 1; }
-    const v = n ? sum / n : null;
-    nodeLevel.set(node, v);
-    return v;
-  };
-  const STEPS = 8;
-  for (const [id, own] of levels) {
-    const [s, e] = ends.get(id) || [];
-    const a = levelAtNode(s) ?? own;
-    const b = levelAtNode(e) ?? own;
-    if (a === own && b === own) continue;  // 両端とも同じ → 単色
-    const stops = [];
-    for (let i = 0; i <= STEPS; i += 1) {
-      const t = i / STEPS;
-      const lv = t <= 0.5 ? a + (own - a) * (t / 0.5) : own + (b - own) * ((t - 0.5) / 0.5);
-      stops.push([t, levelColor(state.indicator, lv)]);
-    }
-    gradients.set(id, stops);
-  }
+  lengths.set(id, d);
+  return d;
 }
 
 export function initMap({ view, onSegmentClick, onBackgroundClick }) {
   onSelect = onSegmentClick;
   map = L.map('map', {
     preferCanvas: true,          // 数万本の線を軽く描くため Canvas を使う
-    renderer: new GradientCanvas({ tolerance: 6, padding: 0.3 }),  // 細い線でもクリックしやすく
+    renderer: L.canvas({ tolerance: 6, padding: 0.3 }),  // 細い線でもクリックしやすく
     zoomControl: false,
     minZoom: 6,
     maxBounds: HOKKAIDO.pad(0.5),
@@ -101,7 +42,10 @@ export function initMap({ view, onSegmentClick, onBackgroundClick }) {
   // 区間の路線名・市町村（scripts/build_road_attributes.py）の出典
   map.attributionControl.addAttribution(
     '道路: 国土数値情報（道路・行政区域） / 路線名: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors');
-  map.createPane('highlight').style.zIndex = 450;
+  const hl = map.createPane('highlight');
+  hl.style.zIndex = 450;
+  // 強調表示は見た目だけ。この面がクリックを受け取ると、下の道路の線をクリックできなくなる
+  hl.style.pointerEvents = 'none';
 
   if (view) map.setView([view.lat, view.lng], view.zoom);
   else map.fitBounds(HOKKAIDO);
@@ -142,16 +86,6 @@ export function setGeometry(geojson) {
     onEachFeature(feature, layer) {
       const id = feature.properties.id;
       layersById.set(id, layer);
-      const c = feature.geometry?.coordinates || [];
-      if (c.length >= 2) {
-        const key = (p) => `${p[0]},${p[1]}`;
-        const se = [key(c[0]), key(c[c.length - 1])];
-        ends.set(id, se);
-        for (const k of se) {
-          if (!nodes.has(k)) nodes.set(k, []);
-          nodes.get(k).push(id);
-        }
-      }
       layer.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         onSelect(feature.properties.id, e.latlng);
@@ -178,28 +112,28 @@ function styleFor(feature) {
   const rep = repFor(id);
   const w = baseWeight();
   if (!rep) {
-    if (!state.filters.nodata) return { opacity: 0, weight: 0, interactive: false, gradient: null };
-    return { color: COLORS.none, weight: Math.max(1.5, w * 0.35), opacity: 0.35, interactive: true, gradient: null };
+    if (!state.filters.nodata) return { opacity: 0, weight: 0, interactive: false };
+    return { color: COLORS.none, weight: Math.max(1.5, w * 0.35), opacity: 0.35, interactive: true };
   }
   const ind = INDICATORS[state.indicator];
   const key = ind.classify(rep);
-  if (state.filters[key] === false) return { opacity: 0, weight: 0, interactive: false, gradient: null };
+  if (state.filters[key] === false) return { opacity: 0, weight: 0, interactive: false };
   const cls = ind.classes.find((c) => c.key === key);
+  // WIPS の濃淡表示: その区間の実測値の色（隣の区間とは混ぜない）
+  const color = state.gradient && state.indicator === 'wips' && rep.wips != null ? wipsColor(rep.wips) : cls.color;
   const severe = ind.isAlert(key) ? 1.5 : 0;
   return {
-    color: cls.color,
+    color,
     weight: w + severe,
     opacity: freshnessOpacity(rep.age_minutes),
     lineCap: 'round',
     lineJoin: 'round',
     interactive: true,
-    gradient: gradients.get(id) || null,
   };
 }
 
 export function restyle() {
   if (!roadLayer) return;
-  computeGradients();
   roadLayer.setStyle(styleFor);
   // 観測のある区間を上に描く（灰色線に埋もれないように）
   for (const id of Object.keys(state.status?.segments || {})) layersById.get(Number(id))?.bringToFront();
@@ -230,9 +164,12 @@ export function centerOf(id) {
   return latlngs[Math.floor(latlngs.length / 2)] || layer.getBounds().getCenter();
 }
 
-export function zoomTo(id) {
-  const layer = layersById.get(id);
-  if (!layer) return;
+/** 区間（または複数の区間）が収まるように地図を動かす */
+export function zoomTo(idOrIds) {
+  const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+  const layers = ids.map((i) => layersById.get(i)).filter(Boolean);
+  if (!layers.length) return;
+  const bounds = layers.reduce((b, l) => b.extend(l.getBounds()), L.latLngBounds(layers[0].getBounds()));
   // パネルに隠れない位置に収める（狭い画面では下部シート、広い画面では右パネル）
   const panel = document.getElementById('panel');
   const mapRect = map.getContainer().getBoundingClientRect();
@@ -241,7 +178,7 @@ export function zoomTo(id) {
   const padBR = !pr ? [40, 40] : narrow
     ? [40, Math.max(40, mapRect.bottom - pr.top + 30)]
     : [Math.max(40, mapRect.right - pr.left + 30), 40];
-  map.flyToBounds(layer.getBounds(), { maxZoom: 15, paddingTopLeft: [40, 60], paddingBottomRight: padBR, duration: 0.6 });
+  map.flyToBounds(bounds, { maxZoom: 15, paddingTopLeft: [40, 60], paddingBottomRight: padBR, duration: 0.6 });
 }
 
 /** 選択区間がパネルの下に隠れていたら、見える位置まで地図をずらす */

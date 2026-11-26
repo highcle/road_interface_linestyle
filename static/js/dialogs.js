@@ -85,7 +85,7 @@ export function initImageDialog() {
     el('imageDialogImg').src = rep.image_url;
     el('imageDialogImg').alt = `${rep.observed_at} の路面画像`;
     el('imageDialogCaption').textContent =
-      `${rep.observed_at} / 車両 ${rep.bus} / WIPS ${rep.wips != null ? rep.wips.toFixed(2) : '欠損'} / 路面 ${surfaceLabel(rep.road_surface)}`;
+      `${rep.observed_at} / WIPS ${rep.wips != null ? rep.wips.toFixed(2) : '欠損'} / 路面 ${surfaceLabel(rep.road_surface)}`;
     dlg.showModal();
   };
 }
