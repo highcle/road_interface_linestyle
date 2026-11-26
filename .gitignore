@@ -8,5 +8,6 @@ __pycache__/
 *.log
 output_24h.json
 geojson
+cache
 cache/
 .venv-test

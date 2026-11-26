@@ -24,12 +24,12 @@
   <header id="appHeader">
     <div class="brand">
       <h1>冬季道路 路面・視界情報</h1>
-      <span class="brand-sub">車載カメラ観測による道路区間ごとの状況</span>
+      <!--<span class="brand-sub">車載カメラ観測による道路区間ごとの状況</span>-->
     </div>
 
     <div class="mode-switch" role="group" aria-label="表示する期間">
       <button type="button" id="btnModeLive" class="seg-btn" aria-pressed="true">現在（直近24時間）</button>
-      <button type="button" id="btnModeHistory" class="seg-btn" aria-pressed="false">過去を検索…</button>
+      <button type="button" id="btnModeHistory" class="seg-btn" aria-pressed="false">過去のデータを検索…</button>
     </div>
 
     <div class="header-right">
@@ -50,7 +50,7 @@
         <button type="button" class="chip" data-hours="3">3時間</button>
         <button type="button" class="chip" data-hours="6">6時間</button>
         <button type="button" class="chip" data-hours="12">12時間</button>
-        <button type="button" class="chip" data-hours="all">全体</button>
+        <button type="button" class="chip" data-hours="all">24時間</button>
       </div>
     </div>
     <div id="timeSlider"></div>
@@ -98,7 +98,6 @@
           <button type="button" class="seg-btn" data-indicator="surface" aria-pressed="false">路面状態</button>
         </div>
         <div id="legendArea" class="legend"></div>
-        <p class="legend-note">線が薄いほど古い観測です。チェックを外すと非表示になります。</p>
       </section>
 
       <section class="card">
